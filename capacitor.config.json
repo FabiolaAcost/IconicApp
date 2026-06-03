@@ -1,0 +1,6 @@
+{
+  "appId": "com.clinica.consentimientos",
+  "appName": "Consentimientos Clínica",
+  "webDir": "www",
+  "bundledWebRuntime": false
+}
