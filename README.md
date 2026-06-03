@@ -1,6 +1,6 @@
 # Clinica Consentimientos
 
-Aplicacion web offline para completar consentimientos informados, capturar firma del paciente y generar PDFs finales sobre plantillas existentes.
+Aplicacion web para completar consentimientos informados, capturar firma del paciente y generar PDFs finales sobre plantillas existentes.
 
 ## Requisitos
 

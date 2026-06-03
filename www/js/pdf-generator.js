@@ -42,11 +42,47 @@ const PdfGenerator = (() => {
   };
 
   async function fetchArrayBuffer(url) {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`No se pudo cargar ${url}`);
+    const embeddedAsset = window.PdfEmbeddedAssets && window.PdfEmbeddedAssets[url];
+    if (embeddedAsset) {
+      return base64ToArrayBuffer(embeddedAsset);
     }
-    return await response.arrayBuffer();
+
+    try {
+      const response = await fetch(url);
+      if (response.ok) {
+        return await response.arrayBuffer();
+      }
+    } catch (error) {
+      return await fetchArrayBufferWithXhr(url);
+    }
+
+    return await fetchArrayBufferWithXhr(url);
+  }
+
+  function base64ToArrayBuffer(base64) {
+    const raw = atob(base64);
+    const bytes = new Uint8Array(raw.length);
+    for (let i = 0; i < raw.length; i += 1) {
+      bytes[i] = raw.charCodeAt(i);
+    }
+    return bytes.buffer;
+  }
+
+  function fetchArrayBufferWithXhr(url) {
+    return new Promise((resolve, reject) => {
+      const request = new XMLHttpRequest();
+      request.open('GET', url, true);
+      request.responseType = 'arraybuffer';
+      request.onload = () => {
+        if (request.status === 200 || request.status === 0) {
+          resolve(request.response);
+        } else {
+          reject(new Error(`No se pudo cargar ${url}`));
+        }
+      };
+      request.onerror = () => reject(new Error(`No se pudo cargar ${url}`));
+      request.send();
+    });
   }
 
   function dataUrlToBytes(dataUrl) {

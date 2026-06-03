@@ -37,7 +37,7 @@ const ConsentStorage = (() => {
     const db = await openDb();
     const transaction = db.transaction(STORE_NAME, 'readwrite');
     const store = transaction.objectStore(STORE_NAME);
-    const id = crypto && crypto.randomUUID ? crypto.randomUUID() : `consent-${Date.now()}`;
+    const id = globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `consent-${Date.now()}`;
     const record = {
       id,
       createdAt: new Date().toISOString(),

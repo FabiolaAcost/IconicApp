@@ -3,25 +3,38 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Consentimientos Clínica</title>
+<meta name="theme-color" content="#111111">
+<title>Consentimientos Iconic Clinic</title>
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
 <div class="app-shell">
 <header>
-  <div>
-    <h1>Consentimientos Informados</h1>
-    <p>Aplicación offline para tablet</p>
+  <div class="brand-block">
+    <div class="brand-mark" aria-label="Iconic Clinic">
+      <span class="brand-iconic">ICONIC</span>
+      <span class="brand-clinic">Clinic</span>
+    </div>
+    <div>
+      <p class="eyebrow">Be unique, be iconic</p>
+      <h1>Consentimientos Informados</h1>
+      <p>Aplicaci&oacute;n para atenci&oacute;n cl&iacute;nica</p>
+    </div>
   </div>
-  <button id="btnGenerateDummy" class="secondary">Generar Dummy</button>
-  <button id="btnShowHistory" class="secondary">Historial</button>
+  <div class="header-actions">
+    <button id="btnShowHistory" class="secondary">Historial</button>
+  </div>
 </header>
 <main>
   <section class="step" id="stepSelect">
-    <div class="card">
+    <div class="card select-card">
+      <p class="eyebrow">Nuevo documento</p>
       <h2>Seleccione el consentimiento</h2>
-      <button id="btnGeneral">Consentimiento General</button>
-      <button id="btnToxina">Consentimiento Toxina</button>
+      <p class="section-copy">Prepare el documento del paciente con revisi&oacute;n, datos cl&iacute;nicos y firma digital.</p>
+      <div class="consent-options">
+        <button id="btnGeneral">Consentimiento General</button>
+        <button id="btnToxina">Consentimiento Toxina</button>
+      </div>
     </div>
   </section>
   <section class="step hidden" id="stepPdf">
@@ -32,7 +45,7 @@
       </div>
       <label class="checkbox-label">
         <input type="checkbox" id="readCheckbox">
-        He leído y comprendido este consentimiento
+        He le&iacute;do y comprendido este consentimiento
       </label>
       <div class="actions">
         <button id="btnPdfBack" class="secondary">Volver</button>
@@ -53,17 +66,17 @@
         <label>Fecha de nacimiento
           <input type="date" id="inputFechaNacimiento" required>
         </label>
-        <label>Dirección
+        <label class="form-wide">Direcci&oacute;n
           <input type="text" id="inputDireccion" required>
         </label>
-        <div id="treatmentContainer">
+        <div id="treatmentContainer" class="form-wide">
           <label>Tratamiento
             <select id="selectTratamiento"></select>
           </label>
         </div>
         <fieldset>
-          <legend>Autorización imagen</legend>
-          <label><input type="radio" name="autorizacion" value="Sí" required> Sí</label>
+          <legend>Autorizaci&oacute;n imagen</legend>
+          <label><input type="radio" name="autorizacion" value="S&iacute;" required> S&iacute;</label>
           <label><input type="radio" name="autorizacion" value="No"> No</label>
         </fieldset>
       </form>
@@ -80,6 +93,7 @@
         <canvas id="signatureCanvas"></canvas>
       </div>
       <div class="actions">
+        <button id="btnSignatureBack" class="secondary">Volver</button>
         <button id="btnClearSignature" class="secondary">Limpiar</button>
         <button id="btnSignatureContinue">Continuar</button>
       </div>
@@ -92,10 +106,10 @@
         <div><strong>Paciente</strong><p id="summaryNombre"></p></div>
         <div><strong>RUT</strong><p id="summaryRut"></p></div>
         <div><strong>Fecha de nacimiento</strong><p id="summaryNacimiento"></p></div>
-        <div><strong>Dirección</strong><p id="summaryDireccion"></p></div>
+        <div><strong>Direcci&oacute;n</strong><p id="summaryDireccion"></p></div>
         <div><strong>Consentimiento</strong><p id="summaryTipo"></p></div>
         <div><strong>Tratamiento</strong><p id="summaryTratamiento"></p></div>
-        <div><strong>Autorización imagen</strong><p id="summaryAutorizacion"></p></div>
+        <div><strong>Autorizaci&oacute;n imagen</strong><p id="summaryAutorizacion"></p></div>
       </div>
       <div class="actions">
         <button id="btnSummaryBack" class="secondary">Volver</button>
@@ -106,7 +120,7 @@
   <section class="step hidden" id="stepDone">
     <div class="card">
       <h2>Consentimiento generado</h2>
-      <p>El consentimiento se generó correctamente y se guardó en el historial.</p>
+      <p>El consentimiento se gener&oacute; correctamente y se guard&oacute; en el historial.</p>
       <div class="actions">
         <button id="btnNewConsent">Nuevo Consentimiento</button>
         <button id="btnGoHistory" class="secondary">Ver Historial</button>
@@ -128,10 +142,34 @@
   </section>
 </main>
 </div>
+<div class="modal-backdrop hidden" id="pinModal" role="dialog" aria-modal="true" aria-labelledby="pinModalTitle">
+  <div class="modal-card pin-card">
+    <p class="eyebrow">Acceso restringido</p>
+    <h2 id="pinModalTitle">Ingrese clave de historial</h2>
+    <p class="modal-copy">Digite la contraseña de 4 dígitos para revisar registros guardados.</p>
+    <input id="pinInput" class="pin-input" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" aria-label="Contraseña de historial">
+    <p class="modal-error hidden" id="pinError">Contraseña incorrecta. Intente nuevamente.</p>
+    <div class="actions modal-actions">
+      <button id="btnPinCancel" class="secondary">Cancelar</button>
+      <button id="btnPinSubmit">Ingresar</button>
+    </div>
+  </div>
+</div>
+<div class="modal-backdrop hidden" id="messageModal" role="dialog" aria-modal="true" aria-labelledby="messageModalTitle">
+  <div class="modal-card">
+    <p class="eyebrow" id="messageModalEyebrow">Atención</p>
+    <h2 id="messageModalTitle">Revise la información</h2>
+    <p class="modal-copy" id="messageModalText"></p>
+    <div class="actions modal-actions">
+      <button id="btnMessageOk">Entendido</button>
+    </div>
+  </div>
+</div>
 <script src="lib/pdf-lib.min.js"></script>
 <script src="lib/jszip.min.js"></script>
 <script src="js/signature.js"></script>
 <script src="js/storage.js"></script>
+<script src="js/pdf-assets.js"></script>
 <script src="js/pdf-generator.js"></script>
 <script src="js/app.js"></script>
 </body>

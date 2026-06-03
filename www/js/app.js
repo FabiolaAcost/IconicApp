@@ -5,10 +5,17 @@ const App = {
     tratamiento: null,
     autorizacion: null,
     paciente: {},
-    signatureDataUrl: null
+    signatureDataUrl: null,
+    historyAccessGranted: false
   },
   signaturePad: null,
   historyRecords: []
+};
+const HISTORY_PIN = '0000';
+const DEFAULT_CONFIG = {
+  doctora: 'Patricia Navarrete',
+  general: ['Ácido Hialurónico', 'Bioestimuladores', 'Mesoterapia', 'PRP', 'Skin Booster', 'Exosomas'],
+  toxina: ['Botox']
 };
 
 window.addEventListener('DOMContentLoaded', initApp);
@@ -18,6 +25,7 @@ async function initApp() {
     document.getElementById('btnSignatureContinue').disabled = App.signaturePad.isEmpty();
   });
   document.getElementById('btnSignatureContinue').disabled = true;
+  setBirthDateLimit();
   App.config = await loadConfig();
   bindEvents();
   showStep('select');
@@ -27,11 +35,20 @@ async function initApp() {
 async function loadConfig() {
   try {
     const response = await fetch('config/tratamientos.json');
-    return await response.json();
+    const config = await response.json();
+    return normalizeConfig(config);
   } catch (error) {
     console.error('Error cargando configuración:', error);
-    return { doctora: 'Patricia Navarrete', general: [], toxina: ['Botox'] };
+    return DEFAULT_CONFIG;
   }
+}
+
+function normalizeConfig(config) {
+  return {
+    doctora: config?.doctora || DEFAULT_CONFIG.doctora,
+    general: Array.isArray(config?.general) && config.general.length ? config.general : DEFAULT_CONFIG.general,
+    toxina: Array.isArray(config?.toxina) && config.toxina.length ? config.toxina : DEFAULT_CONFIG.toxina
+  };
 }
 
 function bindEvents() {
@@ -49,13 +66,22 @@ function bindEvents() {
   document.getElementById('btnSignatureContinue').addEventListener('click', onSignatureContinue);
   document.getElementById('btnSummaryBack').addEventListener('click', () => showStep('signature'));
   document.getElementById('btnGeneratePdf').addEventListener('click', createConsentPdf);
-  document.getElementById('btnGenerateDummy').addEventListener('click', generateDummyConsent);
   document.getElementById('btnNewConsent').addEventListener('click', () => showStep('select'));
-  document.getElementById('btnGoHistory').addEventListener('click', () => showStep('history'));
-  document.getElementById('btnShowHistory').addEventListener('click', () => showStep('history'));
+  document.getElementById('btnSignatureBack').addEventListener('click', () => showStep('form'));
+  document.getElementById('btnGoHistory').addEventListener('click', requestHistoryAccess);
+  document.getElementById('btnShowHistory').addEventListener('click', requestHistoryAccess);
   document.getElementById('btnHistoryBack').addEventListener('click', () => showStep('select'));
   document.getElementById('historySearch').addEventListener('input', refreshHistory);
   document.getElementById('btnExportBackup').addEventListener('click', exportBackup);
+  document.getElementById('btnPinCancel').addEventListener('click', closePinModal);
+  document.getElementById('btnPinSubmit').addEventListener('click', submitHistoryPin);
+  document.getElementById('pinInput').addEventListener('input', onPinInput);
+  document.getElementById('pinInput').addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      submitHistoryPin();
+    }
+  });
+  document.getElementById('btnMessageOk').addEventListener('click', closeMessageModal);
 }
 
 function selectConsent(type) {
@@ -77,8 +103,14 @@ function updateReadContinue() {
 }
 
 function showStep(stepId) {
+  if (stepId === 'history' && !App.state.historyAccessGranted) {
+    requestHistoryAccess();
+    return;
+  }
+
   document.querySelectorAll('.step').forEach((section) => section.classList.add('hidden'));
   document.getElementById(`step${capitalize(stepId)}`).classList.remove('hidden');
+  App.state.historyAccessGranted = false;
 
   if (stepId === 'form') {
     populateTreatmentOptions();
@@ -105,6 +137,13 @@ function populateTreatmentOptions() {
   }
 
   container.style.display = 'block';
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = 'Seleccione un procedimiento';
+  placeholder.disabled = true;
+  placeholder.selected = true;
+  select.appendChild(placeholder);
+
   App.config.general.forEach((treatment) => {
     const option = document.createElement('option');
     option.value = treatment;
@@ -121,8 +160,13 @@ function onFormContinue() {
   const autorizacion = document.querySelector('input[name="autorizacion"]:checked');
   const treatment = App.state.consentType === 'toxina' ? 'Botox' : document.getElementById('selectTratamiento').value;
 
-  if (!nombre || !rut || !nacimiento || !direccion || !autorizacion) {
-    alert('Complete todos los campos obligatorios.');
+  if (!nombre || !rut || !nacimiento || !direccion || !treatment || !autorizacion) {
+    showMessage('Datos incompletos', 'Complete todos los campos obligatorios antes de continuar.', 'Atención', 'Volver a completar');
+    return;
+  }
+
+  if (isFutureDateInput(nacimiento)) {
+    showMessage('Fecha no válida', 'La fecha de nacimiento no puede ser posterior al día de hoy.');
     return;
   }
 
@@ -158,9 +202,78 @@ function formatDateInput(value) {
   return `${day}/${month}/${year}`;
 }
 
+function requestHistoryAccess() {
+  openPinModal();
+}
+
+function openPinModal() {
+  const modal = document.getElementById('pinModal');
+  const input = document.getElementById('pinInput');
+  const error = document.getElementById('pinError');
+  error.classList.add('hidden');
+  input.value = '';
+  modal.classList.remove('hidden');
+  setTimeout(() => input.focus(), 0);
+}
+
+function closePinModal() {
+  document.getElementById('pinModal').classList.add('hidden');
+}
+
+function onPinInput(event) {
+  event.target.value = event.target.value.replace(/\D/g, '').slice(0, 4);
+  document.getElementById('pinError').classList.add('hidden');
+}
+
+function submitHistoryPin() {
+  const input = document.getElementById('pinInput');
+  const error = document.getElementById('pinError');
+  if (input.value !== HISTORY_PIN) {
+    error.classList.remove('hidden');
+    input.select();
+    return;
+  }
+
+  closePinModal();
+  App.state.historyAccessGranted = true;
+  showStep('history');
+}
+
+function showMessage(title, message, eyebrow = 'Atención', actionLabel = 'Entendido') {
+  document.getElementById('messageModalEyebrow').textContent = eyebrow;
+  document.getElementById('messageModalTitle').textContent = title;
+  document.getElementById('messageModalText').textContent = message;
+  document.getElementById('btnMessageOk').textContent = actionLabel;
+  document.getElementById('messageModal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('btnMessageOk').focus(), 0);
+}
+
+function closeMessageModal() {
+  document.getElementById('messageModal').classList.add('hidden');
+}
+
+function setBirthDateLimit() {
+  const input = document.getElementById('inputFechaNacimiento');
+  if (input) {
+    input.max = getTodayInputValue();
+  }
+}
+
+function isFutureDateInput(value) {
+  return Boolean(value) && value > getTodayInputValue();
+}
+
+function getTodayInputValue() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function onSignatureContinue() {
   if (App.signaturePad.isEmpty()) {
-    alert('Debe firmar antes de continuar.');
+    showMessage('Firma requerida', 'Debe firmar antes de continuar.');
     return;
   }
 
@@ -182,23 +295,29 @@ async function createConsentPdf() {
     };
 
     const result = await PdfGenerator.generateConsentPdf(consentData);
-    await ConsentStorage.saveConsent({
-      nombre: App.state.paciente.nombre,
-      rut: App.state.paciente.rut,
-      fecha: formatDate(new Date()),
-      tipo: App.state.consentType === 'general' ? 'GENERAL' : 'TOXINA',
-      tratamiento: App.state.tratamiento,
-      autorizacion: App.state.autorizacion,
-      archivo: result.fileName,
-      pdfBytes: result.pdfBytes
-    });
-
     downloadBlob(new Blob([result.pdfBytes], { type: 'application/pdf' }), result.fileName);
-    await refreshHistory();
+
+    try {
+      await ConsentStorage.saveConsent({
+        nombre: App.state.paciente.nombre,
+        rut: App.state.paciente.rut,
+        fecha: formatDate(new Date()),
+        tipo: App.state.consentType === 'general' ? 'GENERAL' : 'TOXINA',
+        tratamiento: App.state.tratamiento,
+        autorizacion: App.state.autorizacion,
+        archivo: result.fileName,
+        pdfBytes: result.pdfBytes
+      });
+      await refreshHistory();
+    } catch (storageError) {
+      console.error('Error guardando historial:', storageError);
+      showMessage('PDF generado', 'El consentimiento se descargó correctamente, pero no se pudo guardar en el historial de este dispositivo.');
+    }
+
     showStep('done');
   } catch (error) {
     console.error(error);
-    alert('Error generando el PDF. Reintente nuevamente.');
+    showMessage('No se pudo generar el PDF', error?.message || 'Revise los datos e intente nuevamente.');
   } finally {
     document.getElementById('btnGeneratePdf').disabled = false;
   }
@@ -256,35 +375,6 @@ function renderHistoryList(records) {
     actions.appendChild(btnDownload);
     list.appendChild(card);
   });
-}
-
-async function generateDummyConsent() {
-  const button = document.getElementById('btnGenerateDummy');
-  button.disabled = true;
-  try {
-    const dummyPaciente = {
-      nombre: 'Roswel Flores',
-      rut: '276754139-0',
-      nacimiento: '02/06/2026',
-      direccion: 'Calle siempre viva 1234, Comuna Ejemplo, Santiago'
-    };
-    const dummyConsent = {
-      consentType: 'general',
-      paciente: dummyPaciente,
-      tratamiento: App.config?.general?.[0] || 'Bioestimuladores',
-      autorizacion: 'Sí',
-      signatureDataUrl: null,
-      doctora: App.config?.doctora || 'Patricia Navarrete',
-      fecha: formatDate(new Date())
-    };
-    const result = await PdfGenerator.generateConsentPdf(dummyConsent);
-    downloadBlob(new Blob([result.pdfBytes], { type: 'application/pdf' }), result.fileName);
-  } catch (error) {
-    console.error(error);
-    alert('Error generando el PDF dummy. Reintente.');
-  } finally {
-    button.disabled = false;
-  }
 }
 
 async function exportBackup() {
