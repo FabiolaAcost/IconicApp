@@ -22,7 +22,7 @@
     </div>
   </div>
   <div class="header-actions">
-    <button id="btnShowHistory" class="secondary">Historial</button>
+    <button id="btnShowHistory" class="secondary">Men&uacute;</button>
   </div>
 </header>
 <main>
@@ -124,7 +124,36 @@
       <p>El consentimiento se gener&oacute; correctamente y se guard&oacute; en el historial.</p>
       <div class="actions">
         <button id="btnNewConsent">Nuevo Consentimiento</button>
-        <button id="btnGoHistory" class="secondary">Ver Historial</button>
+        <button id="btnGoHistory" class="secondary">Ver Men&uacute;</button>
+      </div>
+    </div>
+  </section>
+  <section class="step hidden" id="stepMenu">
+    <div class="card">
+      <p class="eyebrow">Administraci&oacute;n</p>
+      <h2>Men&uacute;</h2>
+      <p class="section-copy">Acceda al historial de consentimientos y administre la lista de procedimientos disponibles.</p>
+      <div class="menu-options">
+        <button id="btnMenuHistory">Historial</button>
+        <button id="btnMenuProcedures" class="secondary">Procedimientos</button>
+      </div>
+      <div class="actions">
+        <button id="btnMenuBack" class="secondary">Volver</button>
+      </div>
+    </div>
+  </section>
+  <section class="step hidden" id="stepProcedures">
+    <div class="card">
+      <p class="eyebrow">Administraci&oacute;n</p>
+      <h2>Procedimientos</h2>
+      <p class="section-copy">Edite los nombres, habilite o deshabilite procedimientos y agregue nuevas opciones para el consentimiento general.</p>
+      <div class="procedure-add">
+        <input type="text" id="inputNewProcedure" placeholder="Nombre del procedimiento">
+        <button id="btnAddProcedure">Agregar</button>
+      </div>
+      <div id="procedureList" class="procedure-list" aria-live="polite"></div>
+      <div class="actions">
+        <button id="btnProceduresBack" class="secondary">Volver al men&uacute;</button>
       </div>
     </div>
   </section>
@@ -146,10 +175,10 @@
 <div class="modal-backdrop hidden" id="pinModal" role="dialog" aria-modal="true" aria-labelledby="pinModalTitle">
   <div class="modal-card pin-card">
     <p class="eyebrow">Acceso restringido</p>
-    <h2 id="pinModalTitle">Ingrese clave de historial</h2>
-    <p class="modal-copy">Digite la contraseña de 4 dígitos para revisar registros guardados.</p>
-    <input id="pinInput" class="pin-input" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" aria-label="Contraseña de historial">
-    <p class="modal-error hidden" id="pinError">Contraseña incorrecta. Intente nuevamente.</p>
+    <h2 id="pinModalTitle">Ingrese clave de administraci&oacute;n</h2>
+    <p class="modal-copy">Digite la contrase&ntilde;a de 4 d&iacute;gitos para acceder al men&uacute; administrativo.</p>
+    <input id="pinInput" class="pin-input" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" aria-label="Contrase&ntilde;a de administraci&oacute;n">
+    <p class="modal-error hidden" id="pinError">Contrase&ntilde;a incorrecta. Intente nuevamente.</p>
     <div class="actions modal-actions">
       <button id="btnPinCancel" class="secondary">Cancelar</button>
       <button id="btnPinSubmit">Ingresar</button>
@@ -158,8 +187,8 @@
 </div>
 <div class="modal-backdrop hidden" id="messageModal" role="dialog" aria-modal="true" aria-labelledby="messageModalTitle">
   <div class="modal-card">
-    <p class="eyebrow" id="messageModalEyebrow">Atención</p>
-    <h2 id="messageModalTitle">Revise la información</h2>
+    <p class="eyebrow" id="messageModalEyebrow">Atenci&oacute;n</p>
+    <h2 id="messageModalTitle">Revise la informaci&oacute;n</h2>
     <p class="modal-copy" id="messageModalText"></p>
     <div class="actions modal-actions">
       <button id="btnMessageOk">Entendido</button>

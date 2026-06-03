@@ -7,12 +7,15 @@ const App = {
     autorizacion: null,
     paciente: {},
     signatureDataUrl: null,
-    historyAccessGranted: false
+    historyAccessGranted: false,
+    protectedTarget: 'menu'
   },
   signaturePad: null,
-  historyRecords: []
+  historyRecords: [],
+  procedures: []
 };
 const HISTORY_PIN = '0000';
+const PROCEDURES_STORAGE_KEY = 'iconicProcedimientos';
 const DEFAULT_CONFIG = {
   doctora: 'Patricia Navarrete',
   general: ['Ácido Hialurónico', 'Bioestimuladores', 'Mesoterapia', 'PRP', 'Skin Booster', 'Exosomas'],
@@ -28,6 +31,7 @@ async function initApp() {
   document.getElementById('btnSignatureContinue').disabled = true;
   setBirthDateLimit();
   App.config = await loadConfig();
+  App.procedures = loadStoredProcedures(App.config.general);
   bindEvents();
   showStep('select');
   await refreshHistory();
@@ -52,6 +56,48 @@ function normalizeConfig(config) {
   };
 }
 
+function loadStoredProcedures(defaultProcedures) {
+  const baseProcedures = defaultProcedures.map((name) => ({ name, enabled: true }));
+
+  try {
+    const stored = JSON.parse(localStorage.getItem(PROCEDURES_STORAGE_KEY) || '[]');
+    if (!Array.isArray(stored)) {
+      return baseProcedures;
+    }
+
+    const procedures = stored
+      .filter((procedure) => procedure && typeof procedure.name === 'string' && procedure.name.trim())
+      .map((procedure) => ({
+        name: procedure.name.trim(),
+        enabled: procedure.enabled !== false
+      }));
+    const existingNames = new Set(procedures.map((procedure) => normalizeProcedureName(procedure.name)));
+
+    baseProcedures.forEach((procedure) => {
+      if (!existingNames.has(normalizeProcedureName(procedure.name))) {
+        procedures.push(procedure);
+      }
+    });
+
+    return procedures.length ? procedures : baseProcedures;
+  } catch (error) {
+    console.error('Error cargando procedimientos:', error);
+    return baseProcedures;
+  }
+}
+
+function saveProcedures() {
+  localStorage.setItem(PROCEDURES_STORAGE_KEY, JSON.stringify(App.procedures));
+}
+
+function normalizeProcedureName(name) {
+  return name.trim().toLowerCase();
+}
+
+function getEnabledProcedures() {
+  return App.procedures.filter((procedure) => procedure.enabled).map((procedure) => procedure.name);
+}
+
 function bindEvents() {
   document.getElementById('btnGeneral').addEventListener('click', () => selectConsent('general'));
   document.getElementById('btnToxina').addEventListener('click', () => selectConsent('toxina'));
@@ -72,7 +118,17 @@ function bindEvents() {
   document.getElementById('btnSignatureBack').addEventListener('click', () => showStep('form'));
   document.getElementById('btnGoHistory').addEventListener('click', requestHistoryAccess);
   document.getElementById('btnShowHistory').addEventListener('click', requestHistoryAccess);
-  document.getElementById('btnHistoryBack').addEventListener('click', () => showStep('select'));
+  document.getElementById('btnMenuHistory').addEventListener('click', () => openProtectedStep('history'));
+  document.getElementById('btnMenuProcedures').addEventListener('click', () => openProtectedStep('procedures'));
+  document.getElementById('btnMenuBack').addEventListener('click', () => showStep('select'));
+  document.getElementById('btnProceduresBack').addEventListener('click', () => openProtectedStep('menu'));
+  document.getElementById('btnAddProcedure').addEventListener('click', addProcedure);
+  document.getElementById('inputNewProcedure').addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      addProcedure();
+    }
+  });
+  document.getElementById('btnHistoryBack').addEventListener('click', () => openProtectedStep('menu'));
   document.getElementById('historySearch').addEventListener('input', refreshHistory);
   document.getElementById('btnExportBackup').addEventListener('click', exportBackup);
   document.getElementById('btnPinCancel').addEventListener('click', closePinModal);
@@ -106,8 +162,8 @@ function updateReadContinue() {
 }
 
 function showStep(stepId) {
-  if (stepId === 'history' && !App.state.historyAccessGranted) {
-    requestHistoryAccess();
+  if (isProtectedStep(stepId) && !App.state.historyAccessGranted) {
+    requestProtectedStep(stepId);
     return;
   }
 
@@ -122,6 +178,14 @@ function showStep(stepId) {
   if (stepId === 'history') {
     refreshHistory();
   }
+
+  if (stepId === 'procedures') {
+    renderProcedureManager();
+  }
+}
+
+function isProtectedStep(stepId) {
+  return ['menu', 'history', 'procedures'].includes(stepId);
 }
 
 function capitalize(value) {
@@ -141,14 +205,19 @@ function populateTreatmentOptions() {
   }
 
   container.style.display = 'block';
+  const enabledProcedures = getEnabledProcedures();
+  const enabledProcedureSet = new Set(enabledProcedures);
+  App.state.tratamientos = App.state.tratamientos.filter((treatment) => enabledProcedureSet.has(treatment));
+  App.state.tratamiento = getSelectedTreatmentText();
+
   const placeholder = document.createElement('option');
   placeholder.value = '';
-  placeholder.textContent = 'Seleccione un procedimiento';
+  placeholder.textContent = enabledProcedures.length ? 'Seleccione un procedimiento' : 'No hay procedimientos habilitados';
   placeholder.disabled = true;
   placeholder.selected = true;
   select.appendChild(placeholder);
 
-  App.config.general.forEach((treatment) => {
+  enabledProcedures.forEach((treatment) => {
     const option = document.createElement('option');
     option.value = treatment;
     option.textContent = treatment;
@@ -215,6 +284,123 @@ function getSelectedTreatmentText() {
   return App.state.tratamientos.join(', ');
 }
 
+function renderProcedureManager() {
+  const list = document.getElementById('procedureList');
+  if (!list) {
+    return;
+  }
+
+  list.innerHTML = '';
+
+  if (!App.procedures.length) {
+    list.innerHTML = '<p>No hay procedimientos configurados.</p>';
+    return;
+  }
+
+  App.procedures.forEach((procedure, index) => {
+    const item = document.createElement('article');
+    item.className = 'procedure-item';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = procedure.name;
+    input.setAttribute('aria-label', `Nombre de procedimiento ${index + 1}`);
+    input.addEventListener('change', () => updateProcedureName(index, input.value));
+
+    const toggle = document.createElement('label');
+    toggle.className = 'procedure-toggle';
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = procedure.enabled;
+    checkbox.addEventListener('change', () => toggleProcedure(index, checkbox.checked));
+
+    const status = document.createElement('span');
+    status.textContent = procedure.enabled ? 'Habilitado' : 'Deshabilitado';
+
+    toggle.append(checkbox, status);
+    item.append(input, toggle);
+    list.appendChild(item);
+  });
+}
+
+function addProcedure() {
+  const input = document.getElementById('inputNewProcedure');
+  const name = input.value.trim();
+
+  if (!name) {
+    showMessage('Nombre requerido', 'Ingrese el nombre del procedimiento que desea agregar.');
+    input.focus();
+    return;
+  }
+
+  if (hasDuplicateProcedureName(name)) {
+    showMessage('Procedimiento duplicado', 'Ya existe un procedimiento con ese nombre.');
+    input.select();
+    return;
+  }
+
+  App.procedures.push({ name, enabled: true });
+  input.value = '';
+  saveProcedures();
+  renderProcedureManager();
+  populateTreatmentOptions();
+}
+
+function updateProcedureName(index, value) {
+  const name = value.trim();
+  const procedure = App.procedures[index];
+
+  if (!procedure) {
+    return;
+  }
+
+  if (!name) {
+    showMessage('Nombre requerido', 'El procedimiento debe mantener un nombre visible.');
+    renderProcedureManager();
+    return;
+  }
+
+  if (hasDuplicateProcedureName(name, index)) {
+    showMessage('Procedimiento duplicado', 'Ya existe un procedimiento con ese nombre.');
+    renderProcedureManager();
+    return;
+  }
+
+  const previousName = procedure.name;
+  procedure.name = name;
+  App.state.tratamientos = App.state.tratamientos.map((treatment) => treatment === previousName ? name : treatment);
+  App.state.tratamiento = getSelectedTreatmentText();
+  saveProcedures();
+  renderProcedureManager();
+  populateTreatmentOptions();
+}
+
+function toggleProcedure(index, enabled) {
+  const procedure = App.procedures[index];
+  if (!procedure) {
+    return;
+  }
+
+  procedure.enabled = enabled;
+
+  if (!enabled) {
+    App.state.tratamientos = App.state.tratamientos.filter((treatment) => treatment !== procedure.name);
+    App.state.tratamiento = getSelectedTreatmentText();
+  }
+
+  saveProcedures();
+  renderProcedureManager();
+  populateTreatmentOptions();
+}
+
+function hasDuplicateProcedureName(name, currentIndex = -1) {
+  const normalizedName = normalizeProcedureName(name);
+  return App.procedures.some((procedure, index) => {
+    return index !== currentIndex && normalizeProcedureName(procedure.name) === normalizedName;
+  });
+}
+
 function onFormContinue() {
   const nombre = document.getElementById('inputNombre').value.trim();
   const rut = document.getElementById('inputRut').value.trim();
@@ -266,7 +452,17 @@ function formatDateInput(value) {
 }
 
 function requestHistoryAccess() {
+  requestProtectedStep('menu');
+}
+
+function requestProtectedStep(stepId) {
+  App.state.protectedTarget = stepId;
   openPinModal();
+}
+
+function openProtectedStep(stepId) {
+  App.state.historyAccessGranted = true;
+  showStep(stepId);
 }
 
 function openPinModal() {
@@ -298,8 +494,8 @@ function submitHistoryPin() {
   }
 
   closePinModal();
-  App.state.historyAccessGranted = true;
-  showStep('history');
+  openProtectedStep(App.state.protectedTarget || 'menu');
+  App.state.protectedTarget = 'menu';
 }
 
 function showMessage(title, message, eyebrow = 'Atención', actionLabel = 'Entendido') {

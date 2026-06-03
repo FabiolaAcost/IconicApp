@@ -115,6 +115,7 @@ header p {
 .header-actions,
 .actions,
 .history-actions,
+.menu-options,
 .consent-options {
   display: flex;
   align-items: center;
@@ -223,10 +224,19 @@ button:disabled {
   margin-top: 22px;
 }
 
+.menu-options {
+  margin: 22px 0;
+}
+
 .consent-options button {
   flex: 1 1 240px;
   min-height: 70px;
   font-size: 1rem;
+}
+
+.menu-options button {
+  flex: 1 1 220px;
+  min-height: 64px;
 }
 
 .pdf-viewer {
@@ -279,6 +289,8 @@ fieldset {
 
 form input,
 form select,
+#inputNewProcedure,
+.procedure-item input[type="text"],
 #historySearch {
   width: 100%;
   margin-top: 7px;
@@ -293,10 +305,65 @@ form select,
 
 form input:focus,
 form select:focus,
+#inputNewProcedure:focus,
+.procedure-item input[type="text"]:focus,
 #historySearch:focus {
   border-color: var(--rose-dark);
   background: #ffffff;
   box-shadow: 0 0 0 4px rgba(238, 127, 168, 0.18);
+}
+
+.procedure-add {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  margin: 20px 0;
+}
+
+#inputNewProcedure {
+  flex: 1 1 280px;
+  margin-top: 0;
+}
+
+.procedure-list {
+  display: grid;
+  gap: 12px;
+  margin: 18px 0 22px;
+}
+
+.procedure-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, #ffffff, #fff8fa);
+}
+
+.procedure-item input[type="text"] {
+  margin-top: 0;
+}
+
+.procedure-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-width: 170px;
+  padding: 12px 14px;
+  border: 1px solid rgba(201, 95, 134, 0.25);
+  border-radius: var(--radius);
+  background: var(--soft);
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.procedure-toggle input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--rose-dark);
 }
 
 .selected-treatments {
@@ -525,7 +592,9 @@ fieldset label {
   header,
   .brand-block,
   .header-actions,
-  .actions {
+  .actions,
+  .procedure-add,
+  .procedure-item {
     align-items: stretch;
     flex-direction: column;
   }
@@ -541,6 +610,14 @@ fieldset label {
 
   button,
   .consent-options button {
+    width: 100%;
+  }
+
+  .procedure-item {
+    display: flex;
+  }
+
+  .procedure-toggle {
     width: 100%;
   }
 
