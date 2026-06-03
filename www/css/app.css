@@ -299,6 +299,50 @@ form select:focus,
   box-shadow: 0 0 0 4px rgba(238, 127, 168, 0.18);
 }
 
+.selected-treatments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.treatment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  border: 1px solid rgba(201, 95, 134, 0.28);
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--ink);
+  font-weight: 800;
+}
+
+.treatment-chip button {
+  min-height: 28px;
+  width: 28px;
+  padding: 0;
+  border-color: transparent;
+  border-radius: 50%;
+  background: #ffffff;
+  color: var(--rose-dark);
+  line-height: 1;
+}
+
+.treatment-chip button:hover:not(:disabled) {
+  background: var(--rose-dark);
+  color: #ffffff;
+  transform: none;
+}
+
+.selection-hint {
+  width: 100%;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
 fieldset {
   margin: 0;
   padding: 16px;

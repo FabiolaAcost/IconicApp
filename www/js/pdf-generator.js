@@ -244,7 +244,13 @@ const PdfGenerator = (() => {
   function buildFileName(options) {
     const date = formatDateForFile(new Date());
     const rut = options.paciente.rut.replace(/\s+/g, '_');
-    const tratamiento = options.tratamiento.toUpperCase().replace(/\s+/g, '_');
+    const tratamiento = options.tratamiento
+      .toUpperCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^A-Z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 80);
     return `${date}_${rut}_${tratamiento}.pdf`;
   }
 

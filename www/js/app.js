@@ -3,6 +3,7 @@ const App = {
   state: {
     consentType: null,
     tratamiento: null,
+    tratamientos: [],
     autorizacion: null,
     paciente: {},
     signatureDataUrl: null,
@@ -57,6 +58,7 @@ function bindEvents() {
   document.getElementById('btnPdfContinue').addEventListener('click', () => showStep('form'));
   document.getElementById('btnPdfBack').addEventListener('click', () => showStep('select'));
   document.getElementById('readCheckbox').addEventListener('change', updateReadContinue);
+  document.getElementById('selectTratamiento').addEventListener('change', onTreatmentSelect);
   document.getElementById('btnFormContinue').addEventListener('click', onFormContinue);
   document.getElementById('btnFormBack').addEventListener('click', () => showStep('pdf'));
   document.getElementById('btnClearSignature').addEventListener('click', () => {
@@ -87,6 +89,7 @@ function bindEvents() {
 function selectConsent(type) {
   App.state.consentType = type;
   App.state.tratamiento = type === 'toxina' ? 'Botox' : null;
+  App.state.tratamientos = type === 'toxina' ? ['Botox'] : [];
   App.state.autorizacion = null;
   App.state.paciente = {};
   App.state.signatureDataUrl = null;
@@ -133,6 +136,7 @@ function populateTreatmentOptions() {
   if (App.state.consentType === 'toxina') {
     container.style.display = 'none';
     App.state.tratamiento = 'Botox';
+    App.state.tratamientos = ['Botox'];
     return;
   }
 
@@ -150,6 +154,65 @@ function populateTreatmentOptions() {
     option.textContent = treatment;
     select.appendChild(option);
   });
+  renderSelectedTreatments();
+}
+
+function onTreatmentSelect(event) {
+  const treatment = event.target.value;
+  if (!treatment || App.state.tratamientos.includes(treatment)) {
+    event.target.value = '';
+    return;
+  }
+
+  App.state.tratamientos.push(treatment);
+  App.state.tratamiento = getSelectedTreatmentText();
+  event.target.value = '';
+  renderSelectedTreatments();
+}
+
+function removeTreatment(treatment) {
+  App.state.tratamientos = App.state.tratamientos.filter((selected) => selected !== treatment);
+  App.state.tratamiento = getSelectedTreatmentText();
+  renderSelectedTreatments();
+}
+
+function renderSelectedTreatments() {
+  const container = document.getElementById('selectedTreatments');
+  if (!container) {
+    return;
+  }
+
+  container.innerHTML = '';
+  if (!App.state.tratamientos.length) {
+    const hint = document.createElement('p');
+    hint.className = 'selection-hint';
+    hint.textContent = 'Puede seleccionar uno o más procedimientos.';
+    container.appendChild(hint);
+    return;
+  }
+
+  App.state.tratamientos.forEach((treatment) => {
+    const chip = document.createElement('span');
+    chip.className = 'treatment-chip';
+    chip.textContent = treatment;
+
+    const removeButton = document.createElement('button');
+    removeButton.type = 'button';
+    removeButton.textContent = '×';
+    removeButton.setAttribute('aria-label', `Quitar ${treatment}`);
+    removeButton.addEventListener('click', () => removeTreatment(treatment));
+
+    chip.appendChild(removeButton);
+    container.appendChild(chip);
+  });
+}
+
+function getSelectedTreatmentText() {
+  if (App.state.consentType === 'toxina') {
+    return 'Botox';
+  }
+
+  return App.state.tratamientos.join(', ');
 }
 
 function onFormContinue() {
@@ -158,7 +221,7 @@ function onFormContinue() {
   const nacimiento = document.getElementById('inputFechaNacimiento').value;
   const direccion = document.getElementById('inputDireccion').value.trim();
   const autorizacion = document.querySelector('input[name="autorizacion"]:checked');
-  const treatment = App.state.consentType === 'toxina' ? 'Botox' : document.getElementById('selectTratamiento').value;
+  const treatment = getSelectedTreatmentText();
 
   if (!nombre || !rut || !nacimiento || !direccion || !treatment || !autorizacion) {
     showMessage('Datos incompletos', 'Complete todos los campos obligatorios antes de continuar.', 'Atención', 'Volver a completar');
