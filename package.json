@@ -7,8 +7,9 @@
     "build": "echo \"Web assets are in www/\""
   },
   "devDependencies": {
+    "@capacitor/android": "^5.0.0",
     "@capacitor/cli": "^5.0.0",
     "@capacitor/core": "^5.0.0",
-    "@capacitor/android": "^5.0.0"
+    "pdfjs-dist": "^3.11.174"
   }
 }
