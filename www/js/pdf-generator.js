@@ -32,12 +32,12 @@ const PdfGenerator = (() => {
     general: {
       firmaPaciente: { x: 100, y: 292, width: 180, height: 36 },
       rutPaciente: { x: 120, y: 330 },
-      firmaDra: { x: 340, y: 296, width: 220, height: 28 }
+      firmaDra: { x: 340, y: 292, width: 180, height: 36 }
     },
     toxina: {
       firmaPaciente: { x: 100, y: 166, width: 180, height: 36 },
       rutPaciente: { x: 120, y: 198 },
-      firmaDra: { x: 340, y: 170, width: 220, height: 28 }
+      firmaDra: { x: 340, y: 166, width: 180, height: 36 }
     }
   };
 
@@ -96,12 +96,30 @@ const PdfGenerator = (() => {
   }
 
   async function embedDoctorSignature(pdfDoc) {
-    try {
-      const bytes = await fetchArrayBuffer('assets/firma.png');
-      return await pdfDoc.embedPng(bytes);
-    } catch (error) {
-      return null;
+    const signatureFiles = ['assets/FirmaPaty.png'];
+    let lastError = null;
+
+    for (const file of signatureFiles) {
+      try {
+        const bytes = await fetchArrayBuffer(file);
+        return await pdfDoc.embedPng(bytes);
+      } catch (error) {
+        lastError = error;
+      }
     }
+
+    throw lastError || new Error('No se pudo cargar la firma de la Dra. Paty.');
+  }
+
+  function drawImageInBox(page, image, box, scaleFactor = 1) {
+    const imageScale = Math.min(box.width / image.width, box.height / image.height) * scaleFactor;
+    const dims = image.scale(imageScale);
+    page.drawImage(image, {
+      x: box.x + (box.width - dims.width) / 2,
+      y: box.y + (box.height - dims.height) / 2,
+      width: dims.width,
+      height: dims.height
+    });
   }
 
   function drawTextFitWidth(page, text, x, y, options) {
@@ -222,18 +240,7 @@ const PdfGenerator = (() => {
       const page2Coords = PAGE2[options.consentType] || PAGE2.general;
       page2.drawText(options.paciente.rut, { x: page2Coords.rutPaciente.x, y: page2Coords.rutPaciente.y, size: fontSize, font, maxWidth: 180 });
       const doctorSignatureImage = await embedDoctorSignature(pdfDoc);
-      if (doctorSignatureImage) {
-        const signatureScale = Math.min(page2Coords.firmaDra.width / doctorSignatureImage.width, page2Coords.firmaDra.height / doctorSignatureImage.height);
-        const doctorDims = doctorSignatureImage.scale(signatureScale);
-        page2.drawImage(doctorSignatureImage, {
-          x: page2Coords.firmaDra.x + (page2Coords.firmaDra.width - doctorDims.width) / 2,
-          y: page2Coords.firmaDra.y + (page2Coords.firmaDra.height - doctorDims.height) / 2,
-          width: doctorDims.width,
-          height: doctorDims.height
-        });
-      } else {
-        page2.drawText(options.doctora, { x: page2Coords.firmaDra.x, y: page2Coords.firmaDra.y + 8, size: 10, font });
-      }
+      drawImageInBox(page2, doctorSignatureImage, page2Coords.firmaDra);
     }
 
     const pdfBytes = await pdfDoc.save();
@@ -242,16 +249,14 @@ const PdfGenerator = (() => {
   }
 
   function buildFileName(options) {
-    const date = formatDateForFile(new Date());
-    const rut = options.paciente.rut.replace(/\s+/g, '_');
-    const tratamiento = options.tratamiento
-      .toUpperCase()
+    const paciente = options.paciente.nombre
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^A-Z0-9]+/g, '_')
-      .replace(/^_+|_+$/g, '')
+      .replace(/[^a-zA-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
       .slice(0, 80);
-    return `${date}_${rut}_${tratamiento}.pdf`;
+    const timestamp = formatDateForFile(new Date());
+    return `${paciente}-${timestamp}.pdf`;
   }
 
   function formatDate(date) {
@@ -284,7 +289,10 @@ const PdfGenerator = (() => {
   }
 
   function formatDateForFile(date) {
-    return date.toISOString().slice(0, 10).replace(/-/g, '');
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
   return {

@@ -16,10 +16,19 @@ const App = {
 };
 const HISTORY_PIN = '0000';
 const PROCEDURES_STORAGE_KEY = 'iconicProcedimientos';
+const DEFAULT_PROCEDURES = [
+  'Toxina Botulínica',
+  'Ácido hialurónico',
+  'Sculptra',
+  'Radiesse',
+  'Stimulate',
+  'Polinucleotidos',
+  'Mallas PDO'
+];
 const DEFAULT_CONFIG = {
   doctora: 'Patricia Navarrete',
-  general: ['Ácido Hialurónico', 'Bioestimuladores', 'Mesoterapia', 'PRP', 'Skin Booster', 'Exosomas'],
-  toxina: ['Botox']
+  general: DEFAULT_PROCEDURES,
+  toxina: DEFAULT_PROCEDURES
 };
 
 window.addEventListener('DOMContentLoaded', initApp);
@@ -65,21 +74,27 @@ function loadStoredProcedures(defaultProcedures) {
       return baseProcedures;
     }
 
-    const procedures = stored
+    const storedProcedures = stored
       .filter((procedure) => procedure && typeof procedure.name === 'string' && procedure.name.trim())
       .map((procedure) => ({
         name: procedure.name.trim(),
         enabled: procedure.enabled !== false
       }));
-    const existingNames = new Set(procedures.map((procedure) => normalizeProcedureName(procedure.name)));
+    const storedByName = new Map(storedProcedures.map((procedure) => [
+      normalizeProcedureName(procedure.name),
+      procedure
+    ]));
 
-    baseProcedures.forEach((procedure) => {
-      if (!existingNames.has(normalizeProcedureName(procedure.name))) {
-        procedures.push(procedure);
-      }
+    const procedures = baseProcedures.map((procedure) => {
+      const storedProcedure = storedByName.get(normalizeProcedureName(procedure.name));
+      return {
+        name: procedure.name,
+        enabled: storedProcedure ? storedProcedure.enabled : true
+      };
     });
 
-    return procedures.length ? procedures : baseProcedures;
+    localStorage.setItem(PROCEDURES_STORAGE_KEY, JSON.stringify(procedures));
+    return procedures;
   } catch (error) {
     console.error('Error cargando procedimientos:', error);
     return baseProcedures;
@@ -130,7 +145,10 @@ function bindEvents() {
   });
   document.getElementById('btnHistoryBack').addEventListener('click', () => openProtectedStep('menu'));
   document.getElementById('historySearch').addEventListener('input', refreshHistory);
+  document.getElementById('historyMonth').addEventListener('change', refreshHistory);
   document.getElementById('btnExportBackup').addEventListener('click', exportBackup);
+  document.getElementById('btnExportMonth').addEventListener('click', exportMonthBackup);
+  document.getElementById('btnDeleteMonth').addEventListener('click', deleteMonthRecords);
   document.getElementById('btnPinCancel').addEventListener('click', closePinModal);
   document.getElementById('btnPinSubmit').addEventListener('click', submitHistoryPin);
   document.getElementById('pinInput').addEventListener('input', onPinInput);
@@ -144,8 +162,8 @@ function bindEvents() {
 
 function selectConsent(type) {
   App.state.consentType = type;
-  App.state.tratamiento = type === 'toxina' ? 'Botox' : null;
-  App.state.tratamientos = type === 'toxina' ? ['Botox'] : [];
+  App.state.tratamiento = null;
+  App.state.tratamientos = [];
   App.state.autorizacion = null;
   App.state.paciente = {};
   App.state.signatureDataUrl = null;
@@ -196,13 +214,6 @@ function populateTreatmentOptions() {
   const container = document.getElementById('treatmentContainer');
   const select = document.getElementById('selectTratamiento');
   select.innerHTML = '';
-
-  if (App.state.consentType === 'toxina') {
-    container.style.display = 'none';
-    App.state.tratamiento = 'Botox';
-    App.state.tratamientos = ['Botox'];
-    return;
-  }
 
   container.style.display = 'block';
   const enabledProcedures = getEnabledProcedures();
@@ -277,10 +288,6 @@ function renderSelectedTreatments() {
 }
 
 function getSelectedTreatmentText() {
-  if (App.state.consentType === 'toxina') {
-    return 'Botox';
-  }
-
   return App.state.tratamientos.join(', ');
 }
 
@@ -315,10 +322,13 @@ function renderProcedureManager() {
     checkbox.checked = procedure.enabled;
     checkbox.addEventListener('change', () => toggleProcedure(index, checkbox.checked));
 
-    const status = document.createElement('span');
-    status.textContent = procedure.enabled ? 'Habilitado' : 'Deshabilitado';
+    const switchControl = document.createElement('span');
+    switchControl.className = 'procedure-switch';
 
-    toggle.append(checkbox, status);
+    const status = document.createElement('span');
+    status.textContent = 'Activo';
+
+    toggle.append(checkbox, switchControl, status);
     item.append(input, toggle);
     list.appendChild(item);
   });
@@ -596,11 +606,14 @@ function downloadBlob(blob, filename) {
 async function refreshHistory() {
   App.historyRecords = await ConsentStorage.getAllConsents();
   const query = document.getElementById('historySearch').value.trim().toLowerCase();
+  const selectedMonth = document.getElementById('historyMonth').value;
   const filtered = App.historyRecords.filter((record) => {
-    return [record.nombre, record.rut, record.fecha, record.tipo, record.tratamiento]
+    const matchesSearch = [record.nombre, record.rut, record.fecha, record.tipo, record.tratamiento]
       .join(' ')
       .toLowerCase()
       .includes(query);
+    const matchesMonth = !selectedMonth || getRecordMonthKey(record) === selectedMonth;
+    return matchesSearch && matchesMonth;
   });
   renderHistoryList(filtered);
 }
@@ -619,25 +632,59 @@ function renderHistoryList(records) {
     card.className = 'history-card';
     card.innerHTML = `
       <strong>${record.nombre} • ${record.tipo}</strong>
-      <p><strong>RUT:</strong> ${record.rut}</p>
-      <p><strong>Fecha:</strong> ${record.fecha}</p>
-      <p><strong>Tratamiento:</strong> ${record.tratamiento}</p>
-      <p><strong>Archivo:</strong> ${record.archivo}</p>
+      <p><strong>Identificaci&oacute;n</strong> ${record.rut}</p>
+      <p><strong>Fecha de emisi&oacute;n</strong> ${record.fecha}</p>
+      <p><strong>Procedimiento</strong> ${record.tratamiento}</p>
+      <p><strong>Documento</strong> ${record.archivo}</p>
+      <div class="history-actions"></div>
+    `;
+    card.innerHTML = `
+      <h3>${record.nombre}</h3>
+      <p class="history-consent">Consentimiento &bull; ${record.tipo}</p>
+      <p><strong>Identificaci&oacute;n</strong> ${record.rut}</p>
+      <p><strong>Fecha de emisi&oacute;n</strong> ${record.fecha}</p>
+      <p><strong>Procedimiento</strong> ${record.tratamiento}</p>
+      <p><strong>Documento</strong> ${record.archivo}</p>
       <div class="history-actions"></div>
     `;
     const actions = card.querySelector('.history-actions');
     const btnDownload = document.createElement('button');
-    btnDownload.textContent = 'Descargar PDF';
+    btnDownload.textContent = 'Ver Documento';
     btnDownload.addEventListener('click', () => {
       downloadBlob(new Blob([record.pdfBytes], { type: 'application/pdf' }), record.archivo);
     });
     actions.appendChild(btnDownload);
+    const btnDelete = document.createElement('button');
+    btnDelete.className = 'danger subtle-danger';
+    btnDelete.textContent = 'Eliminar';
+    btnDelete.addEventListener('click', () => deleteHistoryRecord(record));
+    actions.appendChild(btnDelete);
     list.appendChild(card);
   });
 }
 
 async function exportBackup() {
   const records = await ConsentStorage.getAllConsents();
+  await exportRecords(records, `respaldo_${formatDateForFile(new Date())}.zip`);
+}
+
+async function exportMonthBackup() {
+  const month = document.getElementById('historyMonth').value;
+  if (!month) {
+    showMessage('Seleccione un mes', 'Debe seleccionar un mes para exportar registros.');
+    return;
+  }
+
+  const records = getRecordsForSelectedMonth();
+  if (!records.length) {
+    showMessage('Sin registros', 'No hay registros para el mes seleccionado.');
+    return;
+  }
+
+  await exportRecords(records, `respaldo_${month.replace('-', '')}.zip`);
+}
+
+async function exportRecords(records, fileName) {
   const zip = new JSZip();
   const metadata = records.map((record) => ({
     id: record.id,
@@ -659,8 +706,58 @@ async function exportBackup() {
   });
 
   const content = await zip.generateAsync({ type: 'blob' });
-  const fileName = `respaldo_${formatDateForFile(new Date())}.zip`;
   downloadBlob(content, fileName);
+}
+
+async function deleteMonthRecords() {
+  const records = getRecordsForSelectedMonth();
+  const month = document.getElementById('historyMonth').value;
+
+  if (!month) {
+    showMessage('Seleccione un mes', 'Debe seleccionar un mes para eliminar registros.');
+    return;
+  }
+
+  if (!records.length) {
+    showMessage('Sin registros', 'No hay registros para el mes seleccionado.');
+    return;
+  }
+
+  const confirmed = window.confirm(`Se eliminaran ${records.length} registro(s) del mes seleccionado. Esta accion no se puede deshacer.`);
+  if (!confirmed) {
+    return;
+  }
+
+  await ConsentStorage.deleteConsentsByIds(records.map((record) => record.id));
+  await refreshHistory();
+}
+
+async function deleteHistoryRecord(record) {
+  const confirmed = window.confirm(`Eliminar el documento "${record.archivo}" del historial? Esta accion no se puede deshacer.`);
+  if (!confirmed) {
+    return;
+  }
+
+  await ConsentStorage.deleteConsentById(record.id);
+  await refreshHistory();
+}
+
+function getRecordsForSelectedMonth() {
+  const month = document.getElementById('historyMonth').value;
+  if (!month) {
+    return [];
+  }
+
+  return App.historyRecords.filter((record) => getRecordMonthKey(record) === month);
+}
+
+function getRecordMonthKey(record) {
+  if (record.createdAt) {
+    return record.createdAt.slice(0, 7);
+  }
+
+  const match = String(record.fecha || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  return match ? `${match[3]}-${match[2]}` : '';
 }
 
 function formatDate(date) {

@@ -83,9 +83,33 @@ const ConsentStorage = (() => {
     });
   }
 
+  async function deleteConsentById(id) {
+    const db = await openDb();
+    const transaction = db.transaction(STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    store.delete(id);
+    return new Promise((resolve, reject) => {
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+  }
+
+  async function deleteConsentsByIds(ids) {
+    const db = await openDb();
+    const transaction = db.transaction(STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    ids.forEach((id) => store.delete(id));
+    return new Promise((resolve, reject) => {
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+  }
+
   return {
     saveConsent,
     getAllConsents,
-    getConsentById
+    getConsentById,
+    deleteConsentById,
+    deleteConsentsByIds
   };
 })();

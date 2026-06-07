@@ -1,14 +1,15 @@
 :root {
-  --ink: #151515;
-  --muted: #6f6b6d;
-  --line: #e7dddd;
-  --paper: #fffdfb;
-  --panel: #ffffff;
-  --soft: #faf4f6;
-  --rose: #ee7fa8;
-  --rose-dark: #c95f86;
-  --charcoal: #2b2929;
-  --shadow: 0 22px 60px rgba(44, 32, 36, 0.11);
+  --ink: #29221c;
+  --muted: #756b60;
+  --line: #e5d8c7;
+  --paper: #fbf7ef;
+  --panel: #fffdf8;
+  --soft: #f4eadb;
+  --sand: #ddc9ad;
+  --taupe: #9a7f63;
+  --earth: #6f563e;
+  --earth-dark: #3b2f25;
+  --shadow: 0 24px 70px rgba(58, 45, 33, 0.1);
   --radius: 8px;
 }
 
@@ -20,11 +21,12 @@ body {
   min-height: 100vh;
   margin: 0;
   background:
-    linear-gradient(135deg, rgba(238, 127, 168, 0.12), transparent 32%),
-    linear-gradient(315deg, rgba(21, 21, 21, 0.06), transparent 30%),
+    linear-gradient(180deg, rgba(255, 253, 248, 0.96), rgba(244, 234, 219, 0.42)),
+    linear-gradient(120deg, rgba(221, 201, 173, 0.28), transparent 34%),
     var(--paper);
   color: var(--ink);
   font-family: Inter, "Segoe UI", Arial, sans-serif;
+  font-weight: 400;
 }
 
 body::before {
@@ -33,83 +35,78 @@ body::before {
   inset: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(rgba(21, 21, 21, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(21, 21, 21, 0.025) 1px, transparent 1px);
-  background-size: 44px 44px;
-  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.45), transparent 70%);
+    linear-gradient(rgba(111, 86, 62, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(111, 86, 62, 0.028) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.32), transparent 68%);
 }
 
 .app-shell {
-  width: min(1120px, 100%);
+  width: min(1180px, 100%);
   margin: 0 auto;
-  padding: 22px clamp(16px, 4vw, 34px) 34px;
+  padding: 24px clamp(16px, 5vw, 48px) 42px;
 }
 
 header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
-  margin-bottom: 22px;
-  padding: 18px;
-  border: 1px solid rgba(231, 221, 221, 0.9);
+  gap: 24px;
+  margin-bottom: 28px;
+  padding: clamp(18px, 3vw, 28px);
+  border: 1px solid rgba(229, 216, 199, 0.9);
   border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.78);
-  box-shadow: 0 12px 34px rgba(44, 32, 36, 0.07);
+  background: rgba(255, 253, 248, 0.84);
+  box-shadow: 0 16px 42px rgba(58, 45, 33, 0.07);
   backdrop-filter: blur(12px);
 }
 
 .brand-block {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: clamp(18px, 3vw, 28px);
   min-width: 0;
 }
 
 .brand-mark {
-  display: grid;
-  place-items: center;
-  flex: 0 0 118px;
-  min-height: 72px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: linear-gradient(180deg, #ffffff, #fff7fa);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 150px;
+  min-height: 104px;
+  padding: 8px;
+  border-right: 1px solid var(--line);
 }
 
-.brand-iconic {
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 1.55rem;
-  letter-spacing: 0.08em;
-  line-height: 1;
-}
-
-.brand-clinic {
-  color: var(--rose-dark);
-  font-family: "Segoe Script", "Brush Script MT", cursive;
-  font-size: 1.18rem;
-  line-height: 1;
+.brand-mark img {
+  display: block;
+  width: 150px;
+  height: 104px;
+  object-fit: contain;
 }
 
 .eyebrow {
   margin: 0 0 6px;
-  color: var(--rose-dark);
+  color: var(--taupe);
   font-size: 0.72rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
 
 header h1 {
   margin: 0;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(1.55rem, 3vw, 2.25rem);
+  font-family: "Playfair Display", Georgia, "Times New Roman", serif;
+  font-size: clamp(1.8rem, 4vw, 3.35rem);
   font-weight: 500;
-  line-height: 1.05;
+  line-height: 0.98;
 }
 
 header p {
-  margin: 6px 0 0;
+  margin: 10px 0 0;
   color: var(--muted);
+  font-size: clamp(0.95rem, 1.8vw, 1.08rem);
+  line-height: 1.55;
 }
 
 .header-actions,
@@ -124,7 +121,7 @@ header p {
 }
 
 .step {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .hidden {
@@ -134,10 +131,10 @@ header p {
 .card {
   position: relative;
   overflow: hidden;
-  padding: clamp(20px, 4vw, 34px);
+  padding: clamp(24px, 5vw, 48px);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.93);
+  background: rgba(255, 253, 248, 0.96);
   box-shadow: var(--shadow);
 }
 
@@ -147,28 +144,29 @@ header p {
   top: 0;
   left: 0;
   width: 100%;
-  height: 4px;
-  background: linear-gradient(90deg, var(--ink), var(--rose), #ffffff);
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--sand), transparent);
 }
 
 .select-card {
-  min-height: 300px;
+  min-height: 360px;
   display: grid;
   align-content: center;
 }
 
 .card h2 {
   margin: 0 0 10px;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(1.35rem, 2.4vw, 2rem);
+  font-family: "Playfair Display", Georgia, "Times New Roman", serif;
+  font-size: clamp(1.55rem, 3vw, 2.55rem);
   font-weight: 500;
+  line-height: 1.05;
 }
 
 .section-copy,
 .card > p {
   max-width: 620px;
   color: var(--muted);
-  line-height: 1.6;
+  line-height: 1.75;
 }
 
 button,
@@ -179,22 +177,22 @@ select {
 
 button {
   min-height: 48px;
-  padding: 13px 20px;
-  border: 1px solid var(--charcoal);
+  padding: 13px 22px;
+  border: 1px solid var(--earth-dark);
   border-radius: var(--radius);
-  background: var(--charcoal);
-  color: #ffffff;
+  background: var(--earth-dark);
+  color: #fffdf8;
   cursor: pointer;
-  font-weight: 800;
-  letter-spacing: 0.02em;
+  font-weight: 700;
+  letter-spacing: 0.03em;
   transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
 }
 
 button:hover:not(:disabled) {
   transform: translateY(-1px);
-  border-color: var(--rose-dark);
-  background: var(--rose-dark);
-  box-shadow: 0 12px 28px rgba(201, 95, 134, 0.22);
+  border-color: var(--earth);
+  background: var(--earth);
+  box-shadow: 0 14px 30px rgba(111, 86, 62, 0.2);
 }
 
 button:active:not(:disabled) {
@@ -203,20 +201,48 @@ button:active:not(:disabled) {
 
 button.secondary {
   border-color: var(--line);
-  background: #ffffff;
-  color: var(--charcoal);
+  background: rgba(255, 253, 248, 0.72);
+  color: var(--earth-dark);
 }
 
 button.secondary:hover:not(:disabled) {
-  border-color: var(--rose);
+  border-color: var(--taupe);
   background: var(--soft);
   color: var(--ink);
 }
 
+button.danger {
+  border-color: #8f342c;
+  background: #8f342c;
+  color: #fffdf8;
+}
+
+button.danger:hover:not(:disabled) {
+  border-color: #6f241e;
+  background: #6f241e;
+}
+
+button.subtle-danger {
+  min-height: 36px;
+  padding: 8px 12px;
+  border-color: rgba(143, 52, 44, 0.18);
+  background: rgba(143, 52, 44, 0.035);
+  color: #7f4943;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+button.subtle-danger:hover:not(:disabled) {
+  border-color: rgba(143, 52, 44, 0.32);
+  background: rgba(143, 52, 44, 0.075);
+  color: #78352f;
+  box-shadow: none;
+}
+
 button:disabled {
-  border-color: #d3cbcd;
-  background: #d8d1d3;
-  color: #837b7e;
+  border-color: #d9cdbc;
+  background: #e7ddd0;
+  color: #958777;
   cursor: not-allowed;
 }
 
@@ -230,7 +256,7 @@ button:disabled {
 
 .consent-options button {
   flex: 1 1 240px;
-  min-height: 70px;
+  min-height: 76px;
   font-size: 1rem;
 }
 
@@ -244,12 +270,15 @@ button:disabled {
   margin: 18px 0;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: #f7f2f3;
+  background: #f5eee4;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
 }
 
 .pdf-viewer embed {
   display: block;
+  width: 100%;
+  height: clamp(560px, 68svh, 860px);
+  border: 0;
 }
 
 .checkbox-label {
@@ -265,7 +294,7 @@ button:disabled {
 fieldset input {
   width: 20px;
   height: 20px;
-  accent-color: var(--rose-dark);
+  accent-color: var(--earth);
 }
 
 form {
@@ -291,13 +320,14 @@ form input,
 form select,
 #inputNewProcedure,
 .procedure-item input[type="text"],
-#historySearch {
+#historySearch,
+#historyMonth {
   width: 100%;
   margin-top: 7px;
   padding: 13px 14px;
-  border: 1px solid #d9ced1;
+  border: 1px solid #d9cdbc;
   border-radius: var(--radius);
-  background: #fffdfd;
+  background: #fffdf8;
   color: var(--ink);
   outline: none;
   transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
@@ -307,10 +337,11 @@ form input:focus,
 form select:focus,
 #inputNewProcedure:focus,
 .procedure-item input[type="text"]:focus,
-#historySearch:focus {
-  border-color: var(--rose-dark);
+#historySearch:focus,
+#historyMonth:focus {
+  border-color: var(--taupe);
   background: #ffffff;
-  box-shadow: 0 0 0 4px rgba(238, 127, 168, 0.18);
+  box-shadow: 0 0 0 4px rgba(154, 127, 99, 0.14);
 }
 
 .procedure-add {
@@ -327,43 +358,88 @@ form select:focus,
 
 .procedure-list {
   display: grid;
-  gap: 12px;
-  margin: 18px 0 22px;
+  gap: 18px;
+  margin: 24px 0 28px;
 }
 
 .procedure-item {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid var(--line);
+  gap: 18px;
+  padding: 18px 0;
+  border: 0;
+  border-bottom: 1px solid rgba(229, 216, 199, 0.82);
   border-radius: var(--radius);
-  background: linear-gradient(180deg, #ffffff, #fff8fa);
+  background: transparent;
 }
 
 .procedure-item input[type="text"] {
   margin-top: 0;
+  border-color: transparent;
+  background: transparent;
+  font-weight: 700;
+  box-shadow: none;
 }
 
 .procedure-toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 9px;
-  min-width: 170px;
-  padding: 12px 14px;
-  border: 1px solid rgba(201, 95, 134, 0.25);
-  border-radius: var(--radius);
-  background: var(--soft);
+  gap: 10px;
+  min-width: 112px;
+  padding: 8px 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
   color: var(--ink);
-  font-weight: 800;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
 }
 
 .procedure-toggle input {
-  width: 20px;
-  height: 20px;
-  accent-color: var(--rose-dark);
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.procedure-switch {
+  position: relative;
+  width: 46px;
+  height: 26px;
+  flex: 0 0 46px;
+  border: 1px solid rgba(154, 127, 99, 0.42);
+  border-radius: 999px;
+  background: #e9dece;
+  transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.procedure-switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fffdf8;
+  box-shadow: 0 2px 8px rgba(58, 45, 33, 0.18);
+  transition: transform 0.18s ease;
+}
+
+.procedure-toggle input:checked + .procedure-switch {
+  border-color: var(--earth);
+  background: var(--earth);
+  box-shadow: 0 8px 20px rgba(111, 86, 62, 0.16);
+}
+
+.procedure-toggle input:checked + .procedure-switch::after {
+  transform: translateX(20px);
+}
+
+.procedure-toggle input:focus-visible + .procedure-switch {
+  box-shadow: 0 0 0 4px rgba(154, 127, 99, 0.16);
 }
 
 .selected-treatments {
@@ -378,7 +454,7 @@ form select:focus,
   align-items: center;
   gap: 8px;
   padding: 9px 11px;
-  border: 1px solid rgba(201, 95, 134, 0.28);
+  border: 1px solid rgba(154, 127, 99, 0.3);
   border-radius: 999px;
   background: var(--soft);
   color: var(--ink);
@@ -391,14 +467,14 @@ form select:focus,
   padding: 0;
   border-color: transparent;
   border-radius: 50%;
-  background: #ffffff;
-  color: var(--rose-dark);
+  background: #fffdf8;
+  color: var(--earth);
   line-height: 1;
 }
 
 .treatment-chip button:hover:not(:disabled) {
-  background: var(--rose-dark);
-  color: #ffffff;
+  background: var(--earth);
+  color: #fffdf8;
   transform: none;
 }
 
@@ -415,12 +491,12 @@ fieldset {
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: linear-gradient(180deg, #ffffff, var(--soft));
+  background: linear-gradient(180deg, #fffdf8, var(--soft));
 }
 
 legend {
   padding: 0 8px;
-  color: var(--rose-dark);
+  color: var(--taupe);
   font-size: 0.82rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -437,11 +513,11 @@ fieldset label {
   min-height: 260px;
   display: grid;
   margin: 18px 0;
-  border: 1px dashed #cdbfc3;
+  border: 1px dashed #cbbba4;
   border-radius: var(--radius);
   background:
-    linear-gradient(180deg, rgba(238, 127, 168, 0.05), transparent),
-    #ffffff;
+    linear-gradient(180deg, rgba(221, 201, 173, 0.14), transparent),
+    #fffdf8;
 }
 
 #signatureCanvas {
@@ -461,7 +537,7 @@ fieldset label {
 .history-card {
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: linear-gradient(180deg, #ffffff, #fff8fa);
+  background: linear-gradient(180deg, #fffdf8, #f8f0e4);
 }
 
 .summary-grid div {
@@ -473,7 +549,7 @@ fieldset label {
 .history-card strong {
   display: block;
   margin-bottom: 8px;
-  color: var(--rose-dark);
+  color: var(--taupe);
   font-size: 0.78rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -489,8 +565,49 @@ fieldset label {
   margin: 18px 0;
 }
 
+.history-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(360px, 1fr);
+  gap: 14px;
+  margin: 22px 0 24px;
+}
+
+.history-control-block {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid rgba(229, 216, 199, 0.9);
+  border-radius: var(--radius);
+  background: rgba(255, 253, 248, 0.64);
+}
+
+.history-control-block label {
+  color: var(--taupe);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.history-search-block {
+  min-height: 100%;
+}
+
+.history-control-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 #historySearch {
-  flex: 1 1 260px;
+  margin-top: 0;
+}
+
+#historyMonth {
+  flex: 1 1 190px;
   margin-top: 0;
 }
 
@@ -499,8 +616,55 @@ fieldset label {
   gap: 14px;
 }
 
+.history-backup-panel {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  margin-top: 28px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(229, 216, 199, 0.88);
+}
+
+.history-backup-panel .eyebrow {
+  margin-bottom: 0;
+}
+
+.history-backup-panel p:not(.eyebrow) {
+  max-width: 520px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.history-backup-panel button {
+  min-height: 40px;
+  margin-top: 6px;
+  padding: 10px 14px;
+  font-size: 0.88rem;
+}
+
+#stepHistory > .card > .actions {
+  margin-top: 30px;
+}
+
 .history-card {
   padding: 16px;
+}
+
+.history-card h3 {
+  margin: 0;
+  font-family: "Playfair Display", Georgia, "Times New Roman", serif;
+  font-size: clamp(1.25rem, 2vw, 1.55rem);
+  font-weight: 500;
+  line-height: 1.15;
+}
+
+.history-consent {
+  margin: 6px 0 16px;
+  color: var(--earth);
+  font-size: 0.92rem;
+  font-weight: 700;
 }
 
 .history-card p + p {
@@ -523,7 +687,7 @@ fieldset label {
   display: grid;
   place-items: center;
   padding: 18px;
-  background: rgba(21, 21, 21, 0.48);
+  background: rgba(41, 34, 28, 0.5);
   backdrop-filter: blur(10px);
 }
 
@@ -536,13 +700,13 @@ fieldset label {
   padding: 28px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background: linear-gradient(180deg, #ffffff, #fff8fa);
-  box-shadow: 0 28px 90px rgba(21, 21, 21, 0.28);
+  background: linear-gradient(180deg, #fffdf8, #f8f0e4);
+  box-shadow: 0 28px 90px rgba(41, 34, 28, 0.28);
 }
 
 .modal-card h2 {
   margin: 0 0 10px;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "Playfair Display", Georgia, "Times New Roman", serif;
   font-size: clamp(1.35rem, 4vw, 1.8rem);
   font-weight: 500;
 }
@@ -557,9 +721,9 @@ fieldset label {
   width: 100%;
   min-height: 58px;
   padding: 12px 16px;
-  border: 1px solid #d9ced1;
+  border: 1px solid #d9cdbc;
   border-radius: var(--radius);
-  background: #ffffff;
+  background: #fffdf8;
   color: var(--ink);
   font-size: 1.55rem;
   font-weight: 800;
@@ -569,23 +733,33 @@ fieldset label {
 }
 
 .pin-input:focus {
-  border-color: var(--rose-dark);
-  box-shadow: 0 0 0 4px rgba(238, 127, 168, 0.18);
+  border-color: var(--taupe);
+  box-shadow: 0 0 0 4px rgba(154, 127, 99, 0.14);
 }
 
 .modal-error {
   margin: 12px 0 0;
   padding: 10px 12px;
-  border: 1px solid rgba(201, 95, 134, 0.35);
+  border: 1px solid rgba(111, 86, 62, 0.28);
   border-radius: var(--radius);
-  background: rgba(238, 127, 168, 0.12);
-  color: var(--rose-dark);
+  background: rgba(221, 201, 173, 0.2);
+  color: var(--earth);
   font-weight: 800;
 }
 
 .modal-actions {
   justify-content: flex-end;
   margin-top: 20px;
+}
+
+@media (max-width: 900px) {
+  .history-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .history-search-block {
+    min-height: auto;
+  }
 }
 
 @media (max-width: 760px) {
@@ -622,11 +796,124 @@ fieldset label {
   }
 
   .pdf-viewer embed {
-    height: 440px;
+    height: clamp(460px, 70svh, 720px);
   }
 
   .modal-actions {
     flex-direction: column-reverse;
+  }
+}
+
+@media (min-width: 761px) and (max-width: 1024px) {
+  .app-shell {
+    width: min(960px, 100%);
+    padding: 28px clamp(24px, 4vw, 40px) 40px;
+  }
+
+  header {
+    align-items: flex-start;
+    gap: 20px;
+  }
+
+  .brand-block {
+    align-items: flex-start;
+  }
+
+  .brand-mark {
+    flex-basis: 128px;
+    min-height: 92px;
+  }
+
+  .brand-mark img {
+    width: 128px;
+    height: 92px;
+  }
+
+  header h1 {
+    font-size: clamp(2.15rem, 5vw, 3rem);
+  }
+
+  .card {
+    padding: clamp(30px, 4.5vw, 42px);
+  }
+
+  .select-card {
+    min-height: min(520px, calc(100svh - 210px));
+  }
+
+  button {
+    min-height: 54px;
+    padding: 15px 24px;
+  }
+
+  .consent-options {
+    gap: 14px;
+  }
+
+  .consent-options button,
+  .menu-options button {
+    min-height: 86px;
+  }
+
+  .pdf-viewer embed {
+    height: clamp(560px, 68svh, 760px);
+  }
+
+  .canvas-wrapper {
+    min-height: 340px;
+  }
+
+  #signatureCanvas {
+    height: 340px;
+  }
+
+  form input,
+  form select,
+  #inputNewProcedure,
+  .procedure-item input[type="text"],
+  #historySearch,
+  #historyMonth {
+    min-height: 54px;
+  }
+}
+
+@media (min-width: 1025px) and (max-width: 1366px) and (pointer: coarse) {
+  .app-shell {
+    width: min(1100px, 100%);
+    padding-top: 30px;
+  }
+
+  .select-card {
+    min-height: min(500px, calc(100svh - 220px));
+  }
+
+  button {
+    min-height: 54px;
+  }
+
+  .consent-options button {
+    min-height: 88px;
+  }
+
+  .pdf-viewer embed {
+    height: clamp(560px, 68svh, 760px);
+  }
+
+  .canvas-wrapper {
+    min-height: 330px;
+  }
+
+  #signatureCanvas {
+    height: 330px;
+  }
+}
+
+@media (pointer: coarse) {
+  button,
+  input,
+  select,
+  .procedure-toggle {
+    min-height: 52px;
   }
 }
 

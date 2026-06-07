@@ -3,8 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#111111">
+<meta name="theme-color" content="#f7f1e8">
 <title>Consentimientos Iconic Clinic</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
@@ -12,25 +15,24 @@
 <header>
   <div class="brand-block">
     <div class="brand-mark" aria-label="Iconic Clinic">
-      <span class="brand-iconic">ICONIC</span>
-      <span class="brand-clinic">Clinic</span>
+      <img src="assets/logoIconic.png" alt="Iconic Clinic">
     </div>
     <div>
       <p class="eyebrow">Be unique, be iconic</p>
-      <h1>Consentimientos Informados</h1>
-      <p>Aplicaci&oacute;n para atenci&oacute;n cl&iacute;nica</p>
+      <h1>Consentimientos Cl&iacute;nicos</h1>
+      <p>Gesti&oacute;n segura de documentos y firmas digitales</p>
     </div>
   </div>
   <div class="header-actions">
-    <button id="btnShowHistory" class="secondary">Men&uacute;</button>
+    <button id="btnShowHistory" class="secondary">Panel</button>
   </div>
 </header>
 <main>
   <section class="step" id="stepSelect">
     <div class="card select-card">
-      <p class="eyebrow">Nuevo documento</p>
+      <p class="eyebrow">Documentaci&oacute;n cl&iacute;nica</p>
       <h2>Seleccione el consentimiento</h2>
-      <p class="section-copy">Prepare el documento del paciente con revisi&oacute;n, datos cl&iacute;nicos y firma digital.</p>
+      <p class="section-copy">Genere el documento cl&iacute;nico del paciente con validaci&oacute;n y firma digital.</p>
       <div class="consent-options">
         <button id="btnGeneral">Consentimiento General</button>
         <button id="btnToxina">Consentimiento Toxina</button>
@@ -41,7 +43,7 @@
     <div class="card">
       <h2>Visualizar PDF</h2>
       <div class="pdf-viewer">
-        <embed id="pdfViewer" src="" type="application/pdf" width="100%" height="520px">
+        <embed id="pdfViewer" src="" type="application/pdf">
       </div>
       <label class="checkbox-label">
         <input type="checkbox" id="readCheckbox">
@@ -76,7 +78,7 @@
           <div id="selectedTreatments" class="selected-treatments" aria-live="polite"></div>
         </div>
         <fieldset>
-          <legend>Autorizaci&oacute;n imagen</legend>
+          <legend>Autorizaci&oacute;n de uso de imagen</legend>
           <label><input type="radio" name="autorizacion" value="S&iacute;" required> S&iacute;</label>
           <label><input type="radio" name="autorizacion" value="No"> No</label>
         </fieldset>
@@ -110,7 +112,7 @@
         <div><strong>Direcci&oacute;n</strong><p id="summaryDireccion"></p></div>
         <div><strong>Consentimiento</strong><p id="summaryTipo"></p></div>
         <div><strong>Tratamiento</strong><p id="summaryTratamiento"></p></div>
-        <div><strong>Autorizaci&oacute;n imagen</strong><p id="summaryAutorizacion"></p></div>
+        <div><strong>Autorizaci&oacute;n de uso de imagen</strong><p id="summaryAutorizacion"></p></div>
       </div>
       <div class="actions">
         <button id="btnSummaryBack" class="secondary">Volver</button>
@@ -124,47 +126,62 @@
       <p>El consentimiento se gener&oacute; correctamente y se guard&oacute; en el historial.</p>
       <div class="actions">
         <button id="btnNewConsent">Nuevo Consentimiento</button>
-        <button id="btnGoHistory" class="secondary">Ver Men&uacute;</button>
+        <button id="btnGoHistory" class="secondary">Ver Panel</button>
       </div>
     </div>
   </section>
   <section class="step hidden" id="stepMenu">
     <div class="card">
-      <p class="eyebrow">Administraci&oacute;n</p>
-      <h2>Men&uacute;</h2>
-      <p class="section-copy">Acceda al historial de consentimientos y administre la lista de procedimientos disponibles.</p>
+      <p class="eyebrow">Panel cl&iacute;nico</p>
+      <h2>Centro de Gesti&oacute;n</h2>
+      <p class="section-copy">Gestione consentimientos, procedimientos y documentaci&oacute;n cl&iacute;nica de forma segura.</p>
       <div class="menu-options">
-        <button id="btnMenuHistory">Historial</button>
-        <button id="btnMenuProcedures" class="secondary">Procedimientos</button>
+        <button id="btnMenuHistory">Historial Cl&iacute;nico</button>
+        <button id="btnMenuProcedures" class="secondary">Gesti&oacute;n de Procedimientos</button>
       </div>
       <div class="actions">
-        <button id="btnMenuBack" class="secondary">Volver</button>
+        <button id="btnMenuBack" class="secondary">Cerrar Panel</button>
       </div>
     </div>
   </section>
   <section class="step hidden" id="stepProcedures">
     <div class="card">
-      <p class="eyebrow">Administraci&oacute;n</p>
+      <p class="eyebrow">Gesti&oacute;n cl&iacute;nica</p>
       <h2>Procedimientos</h2>
-      <p class="section-copy">Edite los nombres, habilite o deshabilite procedimientos y agregue nuevas opciones para el consentimiento general.</p>
+      <p class="section-copy">Administre procedimientos y configure las opciones disponibles para documentos cl&iacute;nicos.</p>
       <div class="procedure-add">
-        <input type="text" id="inputNewProcedure" placeholder="Nombre del procedimiento">
-        <button id="btnAddProcedure">Agregar</button>
+        <input type="text" id="inputNewProcedure" placeholder="Agregar procedimiento">
+        <button id="btnAddProcedure">Crear</button>
       </div>
       <div id="procedureList" class="procedure-list" aria-live="polite"></div>
       <div class="actions">
-        <button id="btnProceduresBack" class="secondary">Volver al men&uacute;</button>
+        <button id="btnProceduresBack" class="secondary">Volver al panel</button>
       </div>
     </div>
   </section>
   <section class="step hidden" id="stepHistory">
     <div class="card">
-      <h2>Historial</h2>
-      <div class="history-actions">
-        <input type="search" id="historySearch" placeholder="Buscar por nombre, RUT o fecha">
-        <button id="btnExportBackup">Exportar Respaldo</button>
+      <h2>Documentaci&oacute;n Cl&iacute;nica</h2>
+      <div class="history-controls">
+        <div class="history-control-block history-search-block">
+          <label for="historySearch">B&uacute;squeda</label>
+          <input type="search" id="historySearch" placeholder="Buscar paciente, procedimiento o RUT">
+        </div>
+        <div class="history-control-block history-month-block">
+          <label for="historyMonth">Filtro mensual</label>
+          <div class="history-control-row">
+            <input type="month" id="historyMonth" aria-label="Mes del historial">
+            <button id="btnExportMonth" class="secondary">Exportar mes</button>
+            <button id="btnDeleteMonth" class="danger subtle-danger">Eliminar mes</button>
+          </div>
+        </div>
       </div>
       <div id="historyList" class="history-list"></div>
+      <div class="history-backup-panel">
+        <p class="eyebrow">Respaldo general</p>
+        <p>Exporte todos los registros almacenados del historial cl&iacute;nico.</p>
+        <button id="btnExportBackup">Exportar historial completo</button>
+      </div>
       <div class="actions">
         <button id="btnHistoryBack" class="secondary">Volver</button>
       </div>
@@ -174,14 +191,14 @@
 </div>
 <div class="modal-backdrop hidden" id="pinModal" role="dialog" aria-modal="true" aria-labelledby="pinModalTitle">
   <div class="modal-card pin-card">
-    <p class="eyebrow">Acceso restringido</p>
-    <h2 id="pinModalTitle">Ingrese clave de administraci&oacute;n</h2>
-    <p class="modal-copy">Digite la contrase&ntilde;a de 4 d&iacute;gitos para acceder al men&uacute; administrativo.</p>
+    <p class="eyebrow">Panel administrativo</p>
+    <h2 id="pinModalTitle">Verificaci&oacute;n segura</h2>
+    <p class="modal-copy">Ingrese la clave de acceso para continuar.</p>
     <input id="pinInput" class="pin-input" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" aria-label="Contrase&ntilde;a de administraci&oacute;n">
     <p class="modal-error hidden" id="pinError">Contrase&ntilde;a incorrecta. Intente nuevamente.</p>
     <div class="actions modal-actions">
-      <button id="btnPinCancel" class="secondary">Cancelar</button>
-      <button id="btnPinSubmit">Ingresar</button>
+      <button id="btnPinCancel" class="secondary">Volver</button>
+      <button id="btnPinSubmit">Acceder</button>
     </div>
   </div>
 </div>
