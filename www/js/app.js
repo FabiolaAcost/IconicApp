@@ -3,12 +3,32 @@ const App = {
   state: {
     consentType: null,
     tratamiento: null,
+    tratamientos: [],
     autorizacion: null,
     paciente: {},
-    signatureDataUrl: null
+    signatureDataUrl: null,
+    historyAccessGranted: false,
+    protectedTarget: 'menu'
   },
   signaturePad: null,
-  historyRecords: []
+  historyRecords: [],
+  procedures: []
+};
+const HISTORY_PIN = '0000';
+const PROCEDURES_STORAGE_KEY = 'iconicProcedimientos';
+const DEFAULT_PROCEDURES = [
+  'Toxina Botulínica',
+  'Ácido hialurónico',
+  'Sculptra',
+  'Radiesse',
+  'Stimulate',
+  'Polinucleotidos',
+  'Mallas PDO'
+];
+const DEFAULT_CONFIG = {
+  doctora: 'Patricia Navarrete',
+  general: DEFAULT_PROCEDURES,
+  toxina: DEFAULT_PROCEDURES
 };
 
 window.addEventListener('DOMContentLoaded', initApp);
@@ -18,7 +38,9 @@ async function initApp() {
     document.getElementById('btnSignatureContinue').disabled = App.signaturePad.isEmpty();
   });
   document.getElementById('btnSignatureContinue').disabled = true;
+  setBirthDateLimit();
   App.config = await loadConfig();
+  App.procedures = loadStoredProcedures(App.config.general);
   bindEvents();
   showStep('select');
   await refreshHistory();
@@ -27,11 +49,68 @@ async function initApp() {
 async function loadConfig() {
   try {
     const response = await fetch('config/tratamientos.json');
-    return await response.json();
+    const config = await response.json();
+    return normalizeConfig(config);
   } catch (error) {
     console.error('Error cargando configuración:', error);
-    return { doctora: 'Patricia Navarrete', general: [], toxina: ['Botox'] };
+    return DEFAULT_CONFIG;
   }
+}
+
+function normalizeConfig(config) {
+  return {
+    doctora: config?.doctora || DEFAULT_CONFIG.doctora,
+    general: Array.isArray(config?.general) && config.general.length ? config.general : DEFAULT_CONFIG.general,
+    toxina: Array.isArray(config?.toxina) && config.toxina.length ? config.toxina : DEFAULT_CONFIG.toxina
+  };
+}
+
+function loadStoredProcedures(defaultProcedures) {
+  const baseProcedures = defaultProcedures.map((name) => ({ name, enabled: true }));
+
+  try {
+    const stored = JSON.parse(localStorage.getItem(PROCEDURES_STORAGE_KEY) || '[]');
+    if (!Array.isArray(stored)) {
+      return baseProcedures;
+    }
+
+    const storedProcedures = stored
+      .filter((procedure) => procedure && typeof procedure.name === 'string' && procedure.name.trim())
+      .map((procedure) => ({
+        name: procedure.name.trim(),
+        enabled: procedure.enabled !== false
+      }));
+    const storedByName = new Map(storedProcedures.map((procedure) => [
+      normalizeProcedureName(procedure.name),
+      procedure
+    ]));
+
+    const procedures = baseProcedures.map((procedure) => {
+      const storedProcedure = storedByName.get(normalizeProcedureName(procedure.name));
+      return {
+        name: procedure.name,
+        enabled: storedProcedure ? storedProcedure.enabled : true
+      };
+    });
+
+    localStorage.setItem(PROCEDURES_STORAGE_KEY, JSON.stringify(procedures));
+    return procedures;
+  } catch (error) {
+    console.error('Error cargando procedimientos:', error);
+    return baseProcedures;
+  }
+}
+
+function saveProcedures() {
+  localStorage.setItem(PROCEDURES_STORAGE_KEY, JSON.stringify(App.procedures));
+}
+
+function normalizeProcedureName(name) {
+  return name.trim().toLowerCase();
+}
+
+function getEnabledProcedures() {
+  return App.procedures.filter((procedure) => procedure.enabled).map((procedure) => procedure.name);
 }
 
 function bindEvents() {
@@ -40,6 +119,7 @@ function bindEvents() {
   document.getElementById('btnPdfContinue').addEventListener('click', () => showStep('form'));
   document.getElementById('btnPdfBack').addEventListener('click', () => showStep('select'));
   document.getElementById('readCheckbox').addEventListener('change', updateReadContinue);
+  document.getElementById('selectTratamiento').addEventListener('change', onTreatmentSelect);
   document.getElementById('btnFormContinue').addEventListener('click', onFormContinue);
   document.getElementById('btnFormBack').addEventListener('click', () => showStep('pdf'));
   document.getElementById('btnClearSignature').addEventListener('click', () => {
@@ -49,18 +129,41 @@ function bindEvents() {
   document.getElementById('btnSignatureContinue').addEventListener('click', onSignatureContinue);
   document.getElementById('btnSummaryBack').addEventListener('click', () => showStep('signature'));
   document.getElementById('btnGeneratePdf').addEventListener('click', createConsentPdf);
-  document.getElementById('btnGenerateDummy').addEventListener('click', generateDummyConsent);
   document.getElementById('btnNewConsent').addEventListener('click', () => showStep('select'));
-  document.getElementById('btnGoHistory').addEventListener('click', () => showStep('history'));
-  document.getElementById('btnShowHistory').addEventListener('click', () => showStep('history'));
-  document.getElementById('btnHistoryBack').addEventListener('click', () => showStep('select'));
+  document.getElementById('btnSignatureBack').addEventListener('click', () => showStep('form'));
+  document.getElementById('btnGoHistory').addEventListener('click', requestHistoryAccess);
+  document.getElementById('btnShowHistory').addEventListener('click', requestHistoryAccess);
+  document.getElementById('btnMenuHistory').addEventListener('click', () => openProtectedStep('history'));
+  document.getElementById('btnMenuProcedures').addEventListener('click', () => openProtectedStep('procedures'));
+  document.getElementById('btnMenuBack').addEventListener('click', () => showStep('select'));
+  document.getElementById('btnProceduresBack').addEventListener('click', () => openProtectedStep('menu'));
+  document.getElementById('btnAddProcedure').addEventListener('click', addProcedure);
+  document.getElementById('inputNewProcedure').addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      addProcedure();
+    }
+  });
+  document.getElementById('btnHistoryBack').addEventListener('click', () => openProtectedStep('menu'));
   document.getElementById('historySearch').addEventListener('input', refreshHistory);
+  document.getElementById('historyMonth').addEventListener('change', refreshHistory);
   document.getElementById('btnExportBackup').addEventListener('click', exportBackup);
+  document.getElementById('btnExportMonth').addEventListener('click', exportMonthBackup);
+  document.getElementById('btnDeleteMonth').addEventListener('click', deleteMonthRecords);
+  document.getElementById('btnPinCancel').addEventListener('click', closePinModal);
+  document.getElementById('btnPinSubmit').addEventListener('click', submitHistoryPin);
+  document.getElementById('pinInput').addEventListener('input', onPinInput);
+  document.getElementById('pinInput').addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      submitHistoryPin();
+    }
+  });
+  document.getElementById('btnMessageOk').addEventListener('click', closeMessageModal);
 }
 
 function selectConsent(type) {
   App.state.consentType = type;
-  App.state.tratamiento = type === 'toxina' ? 'Botox' : null;
+  App.state.tratamiento = null;
+  App.state.tratamientos = [];
   App.state.autorizacion = null;
   App.state.paciente = {};
   App.state.signatureDataUrl = null;
@@ -77,8 +180,14 @@ function updateReadContinue() {
 }
 
 function showStep(stepId) {
+  if (isProtectedStep(stepId) && !App.state.historyAccessGranted) {
+    requestProtectedStep(stepId);
+    return;
+  }
+
   document.querySelectorAll('.step').forEach((section) => section.classList.add('hidden'));
   document.getElementById(`step${capitalize(stepId)}`).classList.remove('hidden');
+  App.state.historyAccessGranted = false;
 
   if (stepId === 'form') {
     populateTreatmentOptions();
@@ -87,6 +196,14 @@ function showStep(stepId) {
   if (stepId === 'history') {
     refreshHistory();
   }
+
+  if (stepId === 'procedures') {
+    renderProcedureManager();
+  }
+}
+
+function isProtectedStep(stepId) {
+  return ['menu', 'history', 'procedures'].includes(stepId);
 }
 
 function capitalize(value) {
@@ -98,18 +215,199 @@ function populateTreatmentOptions() {
   const select = document.getElementById('selectTratamiento');
   select.innerHTML = '';
 
-  if (App.state.consentType === 'toxina') {
-    container.style.display = 'none';
-    App.state.tratamiento = 'Botox';
-    return;
-  }
-
   container.style.display = 'block';
-  App.config.general.forEach((treatment) => {
+  const enabledProcedures = getEnabledProcedures();
+  const enabledProcedureSet = new Set(enabledProcedures);
+  App.state.tratamientos = App.state.tratamientos.filter((treatment) => enabledProcedureSet.has(treatment));
+  App.state.tratamiento = getSelectedTreatmentText();
+
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = enabledProcedures.length ? 'Seleccione un procedimiento' : 'No hay procedimientos habilitados';
+  placeholder.disabled = true;
+  placeholder.selected = true;
+  select.appendChild(placeholder);
+
+  enabledProcedures.forEach((treatment) => {
     const option = document.createElement('option');
     option.value = treatment;
     option.textContent = treatment;
     select.appendChild(option);
+  });
+  renderSelectedTreatments();
+}
+
+function onTreatmentSelect(event) {
+  const treatment = event.target.value;
+  if (!treatment || App.state.tratamientos.includes(treatment)) {
+    event.target.value = '';
+    return;
+  }
+
+  App.state.tratamientos.push(treatment);
+  App.state.tratamiento = getSelectedTreatmentText();
+  event.target.value = '';
+  renderSelectedTreatments();
+}
+
+function removeTreatment(treatment) {
+  App.state.tratamientos = App.state.tratamientos.filter((selected) => selected !== treatment);
+  App.state.tratamiento = getSelectedTreatmentText();
+  renderSelectedTreatments();
+}
+
+function renderSelectedTreatments() {
+  const container = document.getElementById('selectedTreatments');
+  if (!container) {
+    return;
+  }
+
+  container.innerHTML = '';
+  if (!App.state.tratamientos.length) {
+    const hint = document.createElement('p');
+    hint.className = 'selection-hint';
+    hint.textContent = 'Puede seleccionar uno o más procedimientos.';
+    container.appendChild(hint);
+    return;
+  }
+
+  App.state.tratamientos.forEach((treatment) => {
+    const chip = document.createElement('span');
+    chip.className = 'treatment-chip';
+    chip.textContent = treatment;
+
+    const removeButton = document.createElement('button');
+    removeButton.type = 'button';
+    removeButton.textContent = '×';
+    removeButton.setAttribute('aria-label', `Quitar ${treatment}`);
+    removeButton.addEventListener('click', () => removeTreatment(treatment));
+
+    chip.appendChild(removeButton);
+    container.appendChild(chip);
+  });
+}
+
+function getSelectedTreatmentText() {
+  return App.state.tratamientos.join(', ');
+}
+
+function renderProcedureManager() {
+  const list = document.getElementById('procedureList');
+  if (!list) {
+    return;
+  }
+
+  list.innerHTML = '';
+
+  if (!App.procedures.length) {
+    list.innerHTML = '<p>No hay procedimientos configurados.</p>';
+    return;
+  }
+
+  App.procedures.forEach((procedure, index) => {
+    const item = document.createElement('article');
+    item.className = 'procedure-item';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = procedure.name;
+    input.setAttribute('aria-label', `Nombre de procedimiento ${index + 1}`);
+    input.addEventListener('change', () => updateProcedureName(index, input.value));
+
+    const toggle = document.createElement('label');
+    toggle.className = 'procedure-toggle';
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = procedure.enabled;
+    checkbox.addEventListener('change', () => toggleProcedure(index, checkbox.checked));
+
+    const switchControl = document.createElement('span');
+    switchControl.className = 'procedure-switch';
+
+    const status = document.createElement('span');
+    status.textContent = 'Activo';
+
+    toggle.append(checkbox, switchControl, status);
+    item.append(input, toggle);
+    list.appendChild(item);
+  });
+}
+
+function addProcedure() {
+  const input = document.getElementById('inputNewProcedure');
+  const name = input.value.trim();
+
+  if (!name) {
+    showMessage('Nombre requerido', 'Ingrese el nombre del procedimiento que desea agregar.');
+    input.focus();
+    return;
+  }
+
+  if (hasDuplicateProcedureName(name)) {
+    showMessage('Procedimiento duplicado', 'Ya existe un procedimiento con ese nombre.');
+    input.select();
+    return;
+  }
+
+  App.procedures.push({ name, enabled: true });
+  input.value = '';
+  saveProcedures();
+  renderProcedureManager();
+  populateTreatmentOptions();
+}
+
+function updateProcedureName(index, value) {
+  const name = value.trim();
+  const procedure = App.procedures[index];
+
+  if (!procedure) {
+    return;
+  }
+
+  if (!name) {
+    showMessage('Nombre requerido', 'El procedimiento debe mantener un nombre visible.');
+    renderProcedureManager();
+    return;
+  }
+
+  if (hasDuplicateProcedureName(name, index)) {
+    showMessage('Procedimiento duplicado', 'Ya existe un procedimiento con ese nombre.');
+    renderProcedureManager();
+    return;
+  }
+
+  const previousName = procedure.name;
+  procedure.name = name;
+  App.state.tratamientos = App.state.tratamientos.map((treatment) => treatment === previousName ? name : treatment);
+  App.state.tratamiento = getSelectedTreatmentText();
+  saveProcedures();
+  renderProcedureManager();
+  populateTreatmentOptions();
+}
+
+function toggleProcedure(index, enabled) {
+  const procedure = App.procedures[index];
+  if (!procedure) {
+    return;
+  }
+
+  procedure.enabled = enabled;
+
+  if (!enabled) {
+    App.state.tratamientos = App.state.tratamientos.filter((treatment) => treatment !== procedure.name);
+    App.state.tratamiento = getSelectedTreatmentText();
+  }
+
+  saveProcedures();
+  renderProcedureManager();
+  populateTreatmentOptions();
+}
+
+function hasDuplicateProcedureName(name, currentIndex = -1) {
+  const normalizedName = normalizeProcedureName(name);
+  return App.procedures.some((procedure, index) => {
+    return index !== currentIndex && normalizeProcedureName(procedure.name) === normalizedName;
   });
 }
 
@@ -119,10 +417,15 @@ function onFormContinue() {
   const nacimiento = document.getElementById('inputFechaNacimiento').value;
   const direccion = document.getElementById('inputDireccion').value.trim();
   const autorizacion = document.querySelector('input[name="autorizacion"]:checked');
-  const treatment = App.state.consentType === 'toxina' ? 'Botox' : document.getElementById('selectTratamiento').value;
+  const treatment = getSelectedTreatmentText();
 
-  if (!nombre || !rut || !nacimiento || !direccion || !autorizacion) {
-    alert('Complete todos los campos obligatorios.');
+  if (!nombre || !rut || !nacimiento || !direccion || !treatment || !autorizacion) {
+    showMessage('Datos incompletos', 'Complete todos los campos obligatorios antes de continuar.', 'Atención', 'Volver a completar');
+    return;
+  }
+
+  if (isFutureDateInput(nacimiento)) {
+    showMessage('Fecha no válida', 'La fecha de nacimiento no puede ser posterior al día de hoy.');
     return;
   }
 
@@ -158,9 +461,88 @@ function formatDateInput(value) {
   return `${day}/${month}/${year}`;
 }
 
+function requestHistoryAccess() {
+  requestProtectedStep('menu');
+}
+
+function requestProtectedStep(stepId) {
+  App.state.protectedTarget = stepId;
+  openPinModal();
+}
+
+function openProtectedStep(stepId) {
+  App.state.historyAccessGranted = true;
+  showStep(stepId);
+}
+
+function openPinModal() {
+  const modal = document.getElementById('pinModal');
+  const input = document.getElementById('pinInput');
+  const error = document.getElementById('pinError');
+  error.classList.add('hidden');
+  input.value = '';
+  modal.classList.remove('hidden');
+  setTimeout(() => input.focus(), 0);
+}
+
+function closePinModal() {
+  document.getElementById('pinModal').classList.add('hidden');
+}
+
+function onPinInput(event) {
+  event.target.value = event.target.value.replace(/\D/g, '').slice(0, 4);
+  document.getElementById('pinError').classList.add('hidden');
+}
+
+function submitHistoryPin() {
+  const input = document.getElementById('pinInput');
+  const error = document.getElementById('pinError');
+  if (input.value !== HISTORY_PIN) {
+    error.classList.remove('hidden');
+    input.select();
+    return;
+  }
+
+  closePinModal();
+  openProtectedStep(App.state.protectedTarget || 'menu');
+  App.state.protectedTarget = 'menu';
+}
+
+function showMessage(title, message, eyebrow = 'Atención', actionLabel = 'Entendido') {
+  document.getElementById('messageModalEyebrow').textContent = eyebrow;
+  document.getElementById('messageModalTitle').textContent = title;
+  document.getElementById('messageModalText').textContent = message;
+  document.getElementById('btnMessageOk').textContent = actionLabel;
+  document.getElementById('messageModal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('btnMessageOk').focus(), 0);
+}
+
+function closeMessageModal() {
+  document.getElementById('messageModal').classList.add('hidden');
+}
+
+function setBirthDateLimit() {
+  const input = document.getElementById('inputFechaNacimiento');
+  if (input) {
+    input.max = getTodayInputValue();
+  }
+}
+
+function isFutureDateInput(value) {
+  return Boolean(value) && value > getTodayInputValue();
+}
+
+function getTodayInputValue() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function onSignatureContinue() {
   if (App.signaturePad.isEmpty()) {
-    alert('Debe firmar antes de continuar.');
+    showMessage('Firma requerida', 'Debe firmar antes de continuar.');
     return;
   }
 
@@ -182,23 +564,29 @@ async function createConsentPdf() {
     };
 
     const result = await PdfGenerator.generateConsentPdf(consentData);
-    await ConsentStorage.saveConsent({
-      nombre: App.state.paciente.nombre,
-      rut: App.state.paciente.rut,
-      fecha: formatDate(new Date()),
-      tipo: App.state.consentType === 'general' ? 'GENERAL' : 'TOXINA',
-      tratamiento: App.state.tratamiento,
-      autorizacion: App.state.autorizacion,
-      archivo: result.fileName,
-      pdfBytes: result.pdfBytes
-    });
-
     downloadBlob(new Blob([result.pdfBytes], { type: 'application/pdf' }), result.fileName);
-    await refreshHistory();
+
+    try {
+      await ConsentStorage.saveConsent({
+        nombre: App.state.paciente.nombre,
+        rut: App.state.paciente.rut,
+        fecha: formatDate(new Date()),
+        tipo: App.state.consentType === 'general' ? 'GENERAL' : 'TOXINA',
+        tratamiento: App.state.tratamiento,
+        autorizacion: App.state.autorizacion,
+        archivo: result.fileName,
+        pdfBytes: result.pdfBytes
+      });
+      await refreshHistory();
+    } catch (storageError) {
+      console.error('Error guardando historial:', storageError);
+      showMessage('PDF generado', 'El consentimiento se descargó correctamente, pero no se pudo guardar en el historial de este dispositivo.');
+    }
+
     showStep('done');
   } catch (error) {
     console.error(error);
-    alert('Error generando el PDF. Reintente nuevamente.');
+    showMessage('No se pudo generar el PDF', error?.message || 'Revise los datos e intente nuevamente.');
   } finally {
     document.getElementById('btnGeneratePdf').disabled = false;
   }
@@ -218,11 +606,14 @@ function downloadBlob(blob, filename) {
 async function refreshHistory() {
   App.historyRecords = await ConsentStorage.getAllConsents();
   const query = document.getElementById('historySearch').value.trim().toLowerCase();
+  const selectedMonth = document.getElementById('historyMonth').value;
   const filtered = App.historyRecords.filter((record) => {
-    return [record.nombre, record.rut, record.fecha, record.tipo, record.tratamiento]
+    const matchesSearch = [record.nombre, record.rut, record.fecha, record.tipo, record.tratamiento]
       .join(' ')
       .toLowerCase()
       .includes(query);
+    const matchesMonth = !selectedMonth || getRecordMonthKey(record) === selectedMonth;
+    return matchesSearch && matchesMonth;
   });
   renderHistoryList(filtered);
 }
@@ -241,54 +632,59 @@ function renderHistoryList(records) {
     card.className = 'history-card';
     card.innerHTML = `
       <strong>${record.nombre} • ${record.tipo}</strong>
-      <p><strong>RUT:</strong> ${record.rut}</p>
-      <p><strong>Fecha:</strong> ${record.fecha}</p>
-      <p><strong>Tratamiento:</strong> ${record.tratamiento}</p>
-      <p><strong>Archivo:</strong> ${record.archivo}</p>
+      <p><strong>Identificaci&oacute;n</strong> ${record.rut}</p>
+      <p><strong>Fecha de emisi&oacute;n</strong> ${record.fecha}</p>
+      <p><strong>Procedimiento</strong> ${record.tratamiento}</p>
+      <p><strong>Documento</strong> ${record.archivo}</p>
+      <div class="history-actions"></div>
+    `;
+    card.innerHTML = `
+      <h3>${record.nombre}</h3>
+      <p class="history-consent">Consentimiento &bull; ${record.tipo}</p>
+      <p><strong>Identificaci&oacute;n</strong> ${record.rut}</p>
+      <p><strong>Fecha de emisi&oacute;n</strong> ${record.fecha}</p>
+      <p><strong>Procedimiento</strong> ${record.tratamiento}</p>
+      <p><strong>Documento</strong> ${record.archivo}</p>
       <div class="history-actions"></div>
     `;
     const actions = card.querySelector('.history-actions');
     const btnDownload = document.createElement('button');
-    btnDownload.textContent = 'Descargar PDF';
+    btnDownload.textContent = 'Ver Documento';
     btnDownload.addEventListener('click', () => {
       downloadBlob(new Blob([record.pdfBytes], { type: 'application/pdf' }), record.archivo);
     });
     actions.appendChild(btnDownload);
+    const btnDelete = document.createElement('button');
+    btnDelete.className = 'danger subtle-danger';
+    btnDelete.textContent = 'Eliminar';
+    btnDelete.addEventListener('click', () => deleteHistoryRecord(record));
+    actions.appendChild(btnDelete);
     list.appendChild(card);
   });
 }
 
-async function generateDummyConsent() {
-  const button = document.getElementById('btnGenerateDummy');
-  button.disabled = true;
-  try {
-    const dummyPaciente = {
-      nombre: 'Roswel Flores',
-      rut: '276754139-0',
-      nacimiento: '02/06/2026',
-      direccion: 'Calle siempre viva 1234, Comuna Ejemplo, Santiago'
-    };
-    const dummyConsent = {
-      consentType: 'general',
-      paciente: dummyPaciente,
-      tratamiento: App.config?.general?.[0] || 'Bioestimuladores',
-      autorizacion: 'Sí',
-      signatureDataUrl: null,
-      doctora: App.config?.doctora || 'Patricia Navarrete',
-      fecha: formatDate(new Date())
-    };
-    const result = await PdfGenerator.generateConsentPdf(dummyConsent);
-    downloadBlob(new Blob([result.pdfBytes], { type: 'application/pdf' }), result.fileName);
-  } catch (error) {
-    console.error(error);
-    alert('Error generando el PDF dummy. Reintente.');
-  } finally {
-    button.disabled = false;
-  }
-}
-
 async function exportBackup() {
   const records = await ConsentStorage.getAllConsents();
+  await exportRecords(records, `respaldo_${formatDateForFile(new Date())}.zip`);
+}
+
+async function exportMonthBackup() {
+  const month = document.getElementById('historyMonth').value;
+  if (!month) {
+    showMessage('Seleccione un mes', 'Debe seleccionar un mes para exportar registros.');
+    return;
+  }
+
+  const records = getRecordsForSelectedMonth();
+  if (!records.length) {
+    showMessage('Sin registros', 'No hay registros para el mes seleccionado.');
+    return;
+  }
+
+  await exportRecords(records, `respaldo_${month.replace('-', '')}.zip`);
+}
+
+async function exportRecords(records, fileName) {
   const zip = new JSZip();
   const metadata = records.map((record) => ({
     id: record.id,
@@ -310,8 +706,58 @@ async function exportBackup() {
   });
 
   const content = await zip.generateAsync({ type: 'blob' });
-  const fileName = `respaldo_${formatDateForFile(new Date())}.zip`;
   downloadBlob(content, fileName);
+}
+
+async function deleteMonthRecords() {
+  const records = getRecordsForSelectedMonth();
+  const month = document.getElementById('historyMonth').value;
+
+  if (!month) {
+    showMessage('Seleccione un mes', 'Debe seleccionar un mes para eliminar registros.');
+    return;
+  }
+
+  if (!records.length) {
+    showMessage('Sin registros', 'No hay registros para el mes seleccionado.');
+    return;
+  }
+
+  const confirmed = window.confirm(`Se eliminaran ${records.length} registro(s) del mes seleccionado. Esta accion no se puede deshacer.`);
+  if (!confirmed) {
+    return;
+  }
+
+  await ConsentStorage.deleteConsentsByIds(records.map((record) => record.id));
+  await refreshHistory();
+}
+
+async function deleteHistoryRecord(record) {
+  const confirmed = window.confirm(`Eliminar el documento "${record.archivo}" del historial? Esta accion no se puede deshacer.`);
+  if (!confirmed) {
+    return;
+  }
+
+  await ConsentStorage.deleteConsentById(record.id);
+  await refreshHistory();
+}
+
+function getRecordsForSelectedMonth() {
+  const month = document.getElementById('historyMonth').value;
+  if (!month) {
+    return [];
+  }
+
+  return App.historyRecords.filter((record) => getRecordMonthKey(record) === month);
+}
+
+function getRecordMonthKey(record) {
+  if (record.createdAt) {
+    return record.createdAt.slice(0, 7);
+  }
+
+  const match = String(record.fecha || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  return match ? `${match[3]}-${match[2]}` : '';
 }
 
 function formatDate(date) {
