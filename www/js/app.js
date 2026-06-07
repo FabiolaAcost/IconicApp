@@ -851,7 +851,7 @@ function normalizePdfBytes(pdfBytes) {
 
 async function exportBackup() {
   const records = await ConsentStorage.getAllConsents();
-  await exportRecords(records, `respaldo_${formatDateForFile(new Date())}.zip`);
+  await exportRecords(records, `consentimientos_completo_${formatDateForFile(new Date())}.zip`, 'consentimientos_completo');
 }
 
 async function exportMonthBackup() {
@@ -867,28 +867,16 @@ async function exportMonthBackup() {
     return;
   }
 
-  await exportRecords(records, `respaldo_${month.replace('-', '')}.zip`);
+  const monthKey = month.replace('-', '');
+  await exportRecords(records, `consentimientos_${monthKey}.zip`, `consentimientos_${monthKey}`);
 }
 
-async function exportRecords(records, fileName) {
+async function exportRecords(records, fileName, folderName) {
   const zip = new JSZip();
-  const metadata = records.map((record) => ({
-    id: record.id,
-    fecha: record.fecha,
-    nombre: record.nombre,
-    rut: record.rut,
-    tipo: record.tipo,
-    tratamiento: record.tratamiento,
-    autorizacion: record.autorizacion,
-    archivo: record.archivo,
-    createdAt: record.createdAt
-  }));
-
-  zip.file('BaseDatos.json', JSON.stringify(metadata, null, 2));
-  zip.file('Configuracion.json', JSON.stringify(App.config, null, 2));
+  const consentFolder = zip.folder(folderName || 'consentimientos');
 
   records.forEach((record) => {
-    zip.file(`Consentimientos/${record.archivo}`, record.pdfBytes);
+    consentFolder.file(record.archivo, record.pdfBytes);
   });
 
   const content = await zip.generateAsync({ type: 'blob' });
