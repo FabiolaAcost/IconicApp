@@ -12,7 +12,9 @@ const App = {
   },
   signaturePad: null,
   historyRecords: [],
-  procedures: []
+  procedures: [],
+  pdfRenderToken: 0,
+  previewRecord: null
 };
 const HISTORY_PIN = '0000';
 const PROCEDURES_STORAGE_KEY = 'iconicProcedimientos';
@@ -30,10 +32,13 @@ const DEFAULT_CONFIG = {
   general: DEFAULT_PROCEDURES,
   toxina: DEFAULT_PROCEDURES
 };
-
 window.addEventListener('DOMContentLoaded', initApp);
 
 async function initApp() {
+  if (window.pdfjsLib) {
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'lib/pdf.worker.min.js';
+  }
+
   App.signaturePad = initSignature(document.getElementById('signatureCanvas'), () => {
     document.getElementById('btnSignatureContinue').disabled = App.signaturePad.isEmpty();
   });
@@ -120,6 +125,8 @@ function bindEvents() {
   document.getElementById('btnPdfBack').addEventListener('click', () => showStep('select'));
   document.getElementById('readCheckbox').addEventListener('change', updateReadContinue);
   document.getElementById('selectTratamiento').addEventListener('change', onTreatmentSelect);
+  document.getElementById('inputRut').addEventListener('input', onRutInput);
+  document.getElementById('inputRut').addEventListener('blur', onRutBlur);
   document.getElementById('btnFormContinue').addEventListener('click', onFormContinue);
   document.getElementById('btnFormBack').addEventListener('click', () => showStep('pdf'));
   document.getElementById('btnClearSignature').addEventListener('click', () => {
@@ -158,6 +165,8 @@ function bindEvents() {
     }
   });
   document.getElementById('btnMessageOk').addEventListener('click', closeMessageModal);
+  document.getElementById('btnCloseDocumentPreview').addEventListener('click', closeDocumentPreview);
+  document.getElementById('btnDownloadPreviewDocument').addEventListener('click', downloadPreviewDocument);
 }
 
 function selectConsent(type) {
@@ -171,8 +180,63 @@ function selectConsent(type) {
   document.getElementById('readCheckbox').checked = false;
   updateReadContinue();
   const asset = type === 'general' ? 'assets/consentimiento_general.pdf' : 'assets/consentimiento_toxina.pdf';
-  document.getElementById('pdfViewer').src = asset;
   showStep('pdf');
+  renderPdfPreview(asset);
+}
+
+async function renderPdfPreview(asset) {
+  const viewer = document.getElementById('pdfRenderViewer');
+  const renderToken = App.pdfRenderToken + 1;
+  App.pdfRenderToken = renderToken;
+  await renderPdfIntoViewer(asset, viewer, {
+    loadingText: 'Cargando PDF original...',
+    errorText: 'No se pudo visualizar el PDF original. Vuelva atras e intente nuevamente.',
+    shouldContinue: () => renderToken === App.pdfRenderToken
+  });
+}
+
+async function renderPdfIntoViewer(source, viewer, options = {}) {
+  viewer.innerHTML = `<p class="pdf-render-status">${options.loadingText || 'Cargando PDF...'}</p>`;
+  viewer.scrollTop = 0;
+  try {
+    if (!window.pdfjsLib) {
+      throw new Error('No se pudo cargar el visor PDF.');
+    }
+
+    const loadingTask = window.pdfjsLib.getDocument(source);
+    const pdf = await loadingTask.promise;
+
+    if (options.shouldContinue && !options.shouldContinue()) {
+      return;
+    }
+
+    viewer.innerHTML = '';
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      const page = await pdf.getPage(pageNumber);
+      if (options.shouldContinue && !options.shouldContinue()) {
+        return;
+      }
+
+      const baseViewport = page.getViewport({ scale: 1 });
+      const availableWidth = Math.max(280, viewer.clientWidth - 32);
+      const scale = Math.min(1.8, availableWidth / baseViewport.width);
+      const viewport = page.getViewport({ scale });
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      const ratio = window.devicePixelRatio || 1;
+
+      canvas.width = Math.floor(viewport.width * ratio);
+      canvas.height = Math.floor(viewport.height * ratio);
+      canvas.style.width = `${Math.floor(viewport.width)}px`;
+      canvas.style.height = `${Math.floor(viewport.height)}px`;
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      viewer.appendChild(canvas);
+      await page.render({ canvasContext: context, viewport }).promise;
+    }
+  } catch (error) {
+    console.error('Error renderizando PDF:', error);
+    viewer.innerHTML = `<p class="pdf-render-status">${options.errorText || 'No se pudo visualizar el PDF.'}</p>`;
+  }
 }
 
 function updateReadContinue() {
@@ -199,6 +263,10 @@ function showStep(stepId) {
 
   if (stepId === 'procedures') {
     renderProcedureManager();
+  }
+
+  if (stepId === 'signature') {
+    setTimeout(() => App.signaturePad.resize(), 0);
   }
 }
 
@@ -413,22 +481,31 @@ function hasDuplicateProcedureName(name, currentIndex = -1) {
 
 function onFormContinue() {
   const nombre = document.getElementById('inputNombre').value.trim();
-  const rut = document.getElementById('inputRut').value.trim();
+  const rutInput = document.getElementById('inputRut');
+  const rut = formatRut(rutInput.value);
   const nacimiento = document.getElementById('inputFechaNacimiento').value;
   const direccion = document.getElementById('inputDireccion').value.trim();
   const autorizacion = document.querySelector('input[name="autorizacion"]:checked');
   const treatment = getSelectedTreatmentText();
 
   if (!nombre || !rut || !nacimiento || !direccion || !treatment || !autorizacion) {
-    showMessage('Datos incompletos', 'Complete todos los campos obligatorios antes de continuar.', 'Atención', 'Volver a completar');
+    showMessage('Datos incompletos', 'Complete todos los campos obligatorios antes de continuar.', 'Atencion', 'Volver a completar');
+    return;
+  }
+
+  if (!isValidRut(rut)) {
+    showMessage('RUT no valido', 'Ingrese un RUT chileno valido con digito verificador.', 'Atencion', 'Corregir RUT');
+    rutInput.focus();
+    rutInput.select();
     return;
   }
 
   if (isFutureDateInput(nacimiento)) {
-    showMessage('Fecha no válida', 'La fecha de nacimiento no puede ser posterior al día de hoy.');
+    showMessage('Fecha no valida', 'La fecha de nacimiento no puede ser posterior al dia de hoy.');
     return;
   }
 
+  rutInput.value = rut;
   App.state.paciente = {
     nombre,
     rut,
@@ -437,11 +514,57 @@ function onFormContinue() {
   };
   App.state.tratamiento = treatment;
   App.state.autorizacion = autorizacion.value;
-  App.signaturePad.clear();
-  document.getElementById('btnSignatureContinue').disabled = true;
   showStep('signature');
+  setTimeout(() => {
+    App.signaturePad.clear();
+    App.signaturePad.resize();
+    document.getElementById('btnSignatureContinue').disabled = true;
+  }, 0);
 }
 
+function onRutInput(event) {
+  event.target.value = event.target.value.replace(/[^0-9kK.-]/g, '').toUpperCase();
+}
+
+function onRutBlur(event) {
+  event.target.value = formatRut(event.target.value);
+}
+
+function cleanRut(value) {
+  return String(value || '').replace(/[^0-9kK]/g, '').toUpperCase();
+}
+
+function formatRut(value) {
+  const cleaned = cleanRut(value);
+  if (cleaned.length < 2) {
+    return cleaned;
+  }
+
+  const body = cleaned.slice(0, -1);
+  const verifier = cleaned.slice(-1);
+  return `${body.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}-${verifier}`;
+}
+
+function isValidRut(value) {
+  const cleaned = cleanRut(value);
+  if (!/^\d{7,8}[0-9K]$/.test(cleaned)) {
+    return false;
+  }
+
+  const body = cleaned.slice(0, -1);
+  const verifier = cleaned.slice(-1);
+  let multiplier = 2;
+  let sum = 0;
+
+  for (let index = body.length - 1; index >= 0; index -= 1) {
+    sum += Number(body[index]) * multiplier;
+    multiplier = multiplier === 7 ? 2 : multiplier + 1;
+  }
+
+  const expectedValue = 11 - (sum % 11);
+  const expectedVerifier = expectedValue === 11 ? '0' : expectedValue === 10 ? 'K' : String(expectedValue);
+  return verifier === expectedVerifier;
+}
 function showSummary() {
   document.getElementById('summaryNombre').textContent = App.state.paciente.nombre;
   document.getElementById('summaryRut').textContent = App.state.paciente.rut;
@@ -564,7 +687,7 @@ async function createConsentPdf() {
     };
 
     const result = await PdfGenerator.generateConsentPdf(consentData);
-    downloadBlob(new Blob([result.pdfBytes], { type: 'application/pdf' }), result.fileName);
+    await downloadBlob(new Blob([result.pdfBytes], { type: 'application/pdf' }), result.fileName);
 
     try {
       await ConsentStorage.saveConsent({
@@ -592,7 +715,16 @@ async function createConsentPdf() {
   }
 }
 
-function downloadBlob(blob, filename) {
+async function downloadBlob(blob, filename) {
+  if (window.IconicAndroid?.saveFile) {
+    const base64 = await blobToBase64(blob);
+    const savedPath = window.IconicAndroid.saveFile(filename, base64, blob.type || 'application/octet-stream');
+    if (!savedPath) {
+      throw new Error('Android no pudo guardar el archivo generado.');
+    }
+    return savedPath;
+  }
+
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -601,6 +733,15 @@ function downloadBlob(blob, filename) {
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1]);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
 }
 
 async function refreshHistory() {
@@ -648,10 +789,16 @@ function renderHistoryList(records) {
       <div class="history-actions"></div>
     `;
     const actions = card.querySelector('.history-actions');
+    const btnPreview = document.createElement('button');
+    btnPreview.textContent = 'Ver Documento';
+    btnPreview.addEventListener('click', () => openDocumentPreview(record));
+    actions.appendChild(btnPreview);
+
     const btnDownload = document.createElement('button');
-    btnDownload.textContent = 'Ver Documento';
-    btnDownload.addEventListener('click', () => {
-      downloadBlob(new Blob([record.pdfBytes], { type: 'application/pdf' }), record.archivo);
+    btnDownload.className = 'secondary';
+    btnDownload.textContent = 'Descargar';
+    btnDownload.addEventListener('click', async () => {
+      await downloadBlob(new Blob([record.pdfBytes], { type: 'application/pdf' }), record.archivo);
     });
     actions.appendChild(btnDownload);
     const btnDelete = document.createElement('button');
@@ -663,9 +810,48 @@ function renderHistoryList(records) {
   });
 }
 
+async function openDocumentPreview(record) {
+  App.previewRecord = record;
+  document.getElementById('documentPreviewTitle').textContent = record.archivo || 'Previsualizacion';
+  document.getElementById('documentPreviewModal').classList.remove('hidden');
+
+  const viewer = document.getElementById('historyPdfViewer');
+  const bytes = normalizePdfBytes(record.pdfBytes);
+  await renderPdfIntoViewer({ data: bytes }, viewer, {
+    loadingText: 'Cargando documento firmado...',
+    errorText: 'No se pudo previsualizar este documento.'
+  });
+}
+
+function closeDocumentPreview() {
+  App.previewRecord = null;
+  document.getElementById('historyPdfViewer').innerHTML = '';
+  document.getElementById('documentPreviewModal').classList.add('hidden');
+}
+
+async function downloadPreviewDocument() {
+  if (!App.previewRecord) {
+    return;
+  }
+
+  await downloadBlob(new Blob([App.previewRecord.pdfBytes], { type: 'application/pdf' }), App.previewRecord.archivo);
+}
+
+function normalizePdfBytes(pdfBytes) {
+  if (pdfBytes instanceof Uint8Array) {
+    return new Uint8Array(pdfBytes);
+  }
+
+  if (pdfBytes instanceof ArrayBuffer) {
+    return new Uint8Array(pdfBytes.slice(0));
+  }
+
+  return new Uint8Array(pdfBytes);
+}
+
 async function exportBackup() {
   const records = await ConsentStorage.getAllConsents();
-  await exportRecords(records, `respaldo_${formatDateForFile(new Date())}.zip`);
+  await exportRecords(records, `consentimientos_completo_${formatDateForFile(new Date())}.zip`, 'consentimientos_completo');
 }
 
 async function exportMonthBackup() {
@@ -681,32 +867,20 @@ async function exportMonthBackup() {
     return;
   }
 
-  await exportRecords(records, `respaldo_${month.replace('-', '')}.zip`);
+  const monthKey = month.replace('-', '');
+  await exportRecords(records, `consentimientos_${monthKey}.zip`, `consentimientos_${monthKey}`);
 }
 
-async function exportRecords(records, fileName) {
+async function exportRecords(records, fileName, folderName) {
   const zip = new JSZip();
-  const metadata = records.map((record) => ({
-    id: record.id,
-    fecha: record.fecha,
-    nombre: record.nombre,
-    rut: record.rut,
-    tipo: record.tipo,
-    tratamiento: record.tratamiento,
-    autorizacion: record.autorizacion,
-    archivo: record.archivo,
-    createdAt: record.createdAt
-  }));
-
-  zip.file('BaseDatos.json', JSON.stringify(metadata, null, 2));
-  zip.file('Configuracion.json', JSON.stringify(App.config, null, 2));
+  const consentFolder = zip.folder(folderName || 'consentimientos');
 
   records.forEach((record) => {
-    zip.file(`Consentimientos/${record.archivo}`, record.pdfBytes);
+    consentFolder.file(record.archivo, record.pdfBytes);
   });
 
   const content = await zip.generateAsync({ type: 'blob' });
-  downloadBlob(content, fileName);
+  await downloadBlob(content, fileName);
 }
 
 async function deleteMonthRecords() {

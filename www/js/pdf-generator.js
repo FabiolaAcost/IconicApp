@@ -11,7 +11,7 @@ const PdfGenerator = (() => {
       dra2: { x: 224, y: 420.2, width: 160 },
       autorizacionSi: { x: 255, y: 293 },
       autorizacionNo: { x: 304, y: 293 },
-      firmaPacientePagina1: { x: 180, y: 80, width: 260, height: 28 }
+      firmaPacientePagina1: { x: 165, y: 88, width: 290, height: 34 }
     },
     toxina: {
       fecha: { x: 118, y: 651.6, width: 70, cover: { x: 116, y: 647.1, width: 83, height: 12 }, line: { x: 118, y: 648.2, width: 78 } },
@@ -24,20 +24,20 @@ const PdfGenerator = (() => {
       dra2: { x: 126, y: 436.8, width: 160 },
       autorizacionSi: { x: 244, y: 308.6 },
       autorizacionNo: { x: 292, y: 308.6 },
-      firmaPacientePagina1: { x: 180, y: 96, width: 260, height: 28 }
+      firmaPacientePagina1: { x: 165, y: 104, width: 290, height: 34 }
     }
   };
 
   const PAGE2 = {
     general: {
-      firmaPaciente: { x: 100, y: 292, width: 180, height: 36 },
+      firmaPaciente: { x: 82, y: 296, width: 216, height: 42 },
       rutPaciente: { x: 120, y: 330 },
-      firmaDra: { x: 340, y: 292, width: 180, height: 36 }
+      firmaDra: { x: 322, y: 298, width: 216, height: 40 }
     },
     toxina: {
-      firmaPaciente: { x: 100, y: 166, width: 180, height: 36 },
+      firmaPaciente: { x: 82, y: 170, width: 216, height: 42 },
       rutPaciente: { x: 120, y: 198 },
-      firmaDra: { x: 340, y: 166, width: 180, height: 36 }
+      firmaDra: { x: 322, y: 172, width: 216, height: 40 }
     }
   };
 
@@ -96,7 +96,7 @@ const PdfGenerator = (() => {
   }
 
   async function embedDoctorSignature(pdfDoc) {
-    const signatureFiles = ['assets/FirmaPaty.png'];
+    const signatureFiles = ['assets/firmaPaty.png'];
     let lastError = null;
 
     for (const file of signatureFiles) {
@@ -214,7 +214,7 @@ const PdfGenerator = (() => {
       const signatureBytes = dataUrlToBytes(options.signatureDataUrl);
       const signatureImage = await pdfDoc.embedPng(signatureBytes);
       const signatureBox = page1Coords.firmaPacientePagina1;
-      const signatureScale = Math.min(signatureBox.width / signatureImage.width, signatureBox.height / signatureImage.height) * 0.92;
+      const signatureScale = Math.min(signatureBox.width / signatureImage.width, signatureBox.height / signatureImage.height) * 0.96;
       const signatureDims = signatureImage.scale(signatureScale);
       page1.drawImage(signatureImage, {
         x: signatureBox.x + (signatureBox.width - signatureDims.width) / 2,
@@ -225,7 +225,7 @@ const PdfGenerator = (() => {
       if (page2) {
         const page2Coords = PAGE2[options.consentType] || PAGE2.general;
         const signatureBox2 = page2Coords.firmaPaciente;
-        const signatureScale2 = Math.min(signatureBox2.width / signatureImage.width, signatureBox2.height / signatureImage.height) * 0.9;
+        const signatureScale2 = Math.min(signatureBox2.width / signatureImage.width, signatureBox2.height / signatureImage.height) * 0.98;
         const signatureDims2 = signatureImage.scale(signatureScale2);
         page2.drawImage(signatureImage, {
           x: signatureBox2.x + (signatureBox2.width - signatureDims2.width) / 2,
@@ -240,7 +240,7 @@ const PdfGenerator = (() => {
       const page2Coords = PAGE2[options.consentType] || PAGE2.general;
       page2.drawText(options.paciente.rut, { x: page2Coords.rutPaciente.x, y: page2Coords.rutPaciente.y, size: fontSize, font, maxWidth: 180 });
       const doctorSignatureImage = await embedDoctorSignature(pdfDoc);
-      drawImageInBox(page2, doctorSignatureImage, page2Coords.firmaDra);
+      drawImageInBox(page2, doctorSignatureImage, page2Coords.firmaDra, 1);
     }
 
     const pdfBytes = await pdfDoc.save();

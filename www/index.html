@@ -43,7 +43,7 @@
     <div class="card">
       <h2>Visualizar PDF</h2>
       <div class="pdf-viewer">
-        <embed id="pdfViewer" src="" type="application/pdf">
+        <div id="pdfRenderViewer" class="pdf-render-viewer" tabindex="0" aria-live="polite"></div>
       </div>
       <label class="checkbox-label">
         <input type="checkbox" id="readCheckbox">
@@ -188,6 +188,9 @@
     </div>
   </section>
 </main>
+<footer class="app-footer">
+  <p>Copyright 2026 &copy; Desarrollado por Fabiola Acosta</p>
+</footer>
 </div>
 <div class="modal-backdrop hidden" id="pinModal" role="dialog" aria-modal="true" aria-labelledby="pinModalTitle">
   <div class="modal-card pin-card">
@@ -212,7 +215,19 @@
     </div>
   </div>
 </div>
+<div class="modal-backdrop hidden" id="documentPreviewModal" role="dialog" aria-modal="true" aria-labelledby="documentPreviewTitle">
+  <div class="modal-card document-preview-card">
+    <p class="eyebrow">Documento cl&iacute;nico</p>
+    <h2 id="documentPreviewTitle">Previsualizaci&oacute;n</h2>
+    <div id="historyPdfViewer" class="pdf-render-viewer history-pdf-viewer" tabindex="0" aria-live="polite"></div>
+    <div class="actions modal-actions">
+      <button id="btnCloseDocumentPreview" class="secondary">Cerrar</button>
+      <button id="btnDownloadPreviewDocument">Descargar</button>
+    </div>
+  </div>
+</div>
 <script src="lib/pdf-lib.min.js"></script>
+<script src="lib/pdf.min.js"></script>
 <script src="lib/jszip.min.js"></script>
 <script src="js/signature.js"></script>
 <script src="js/storage.js"></script>

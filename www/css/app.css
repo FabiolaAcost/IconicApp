@@ -148,6 +148,19 @@ header p {
   background: linear-gradient(90deg, transparent, var(--sand), transparent);
 }
 
+.app-footer {
+  padding: 8px 0 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+.app-footer p {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
 .select-card {
   min-height: 360px;
   display: grid;
@@ -274,11 +287,37 @@ button:disabled {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
 }
 
-.pdf-viewer embed {
-  display: block;
-  width: 100%;
+.pdf-render-viewer {
   height: clamp(560px, 68svh, 860px);
-  border: 0;
+  overflow: auto;
+  display: grid;
+  justify-items: center;
+  gap: 18px;
+  padding: clamp(14px, 3vw, 28px);
+  background: #eee6da;
+  color: var(--ink);
+  -webkit-overflow-scrolling: touch;
+}
+
+.pdf-render-viewer canvas {
+  width: min(100%, 820px);
+  height: auto;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(58, 45, 33, 0.18);
+}
+
+.pdf-render-status {
+  align-self: start;
+  justify-self: stretch;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fffdf8;
+  color: var(--muted);
+  font-weight: 700;
+  text-align: center;
 }
 
 .checkbox-label {
@@ -333,7 +372,7 @@ form select,
   transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
 }
 
-form input:focus,
+form input:not([type="radio"]):not([type="checkbox"]):focus,
 form select:focus,
 #inputNewProcedure:focus,
 .procedure-item input[type="text"]:focus,
@@ -342,6 +381,18 @@ form select:focus,
   border-color: var(--taupe);
   background: #ffffff;
   box-shadow: 0 0 0 4px rgba(154, 127, 99, 0.14);
+}
+
+form input[type="radio"]:focus,
+form input[type="checkbox"]:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+form input[type="radio"]:focus-visible,
+form input[type="checkbox"]:focus-visible {
+  outline: 2px solid rgba(111, 86, 62, 0.45);
+  outline-offset: 3px;
 }
 
 .procedure-add {
@@ -704,6 +755,18 @@ fieldset label {
   box-shadow: 0 28px 90px rgba(41, 34, 28, 0.28);
 }
 
+.document-preview-card {
+  width: min(980px, 96vw);
+  max-height: 92svh;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+}
+
+.history-pdf-viewer {
+  height: min(66svh, 720px);
+  margin-top: 14px;
+}
+
 .modal-card h2 {
   margin: 0 0 10px;
   font-family: "Playfair Display", Georgia, "Times New Roman", serif;
@@ -795,7 +858,7 @@ fieldset label {
     width: 100%;
   }
 
-  .pdf-viewer embed {
+  .pdf-render-viewer {
     height: clamp(460px, 70svh, 720px);
   }
 
@@ -855,7 +918,7 @@ fieldset label {
     min-height: 86px;
   }
 
-  .pdf-viewer embed {
+  .pdf-render-viewer {
     height: clamp(560px, 68svh, 760px);
   }
 
@@ -895,7 +958,7 @@ fieldset label {
     min-height: 88px;
   }
 
-  .pdf-viewer embed {
+  .pdf-render-viewer {
     height: clamp(560px, 68svh, 760px);
   }
 
