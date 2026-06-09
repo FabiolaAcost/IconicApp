@@ -136,7 +136,10 @@ function bindEvents() {
   document.getElementById('btnSignatureContinue').addEventListener('click', onSignatureContinue);
   document.getElementById('btnSummaryBack').addEventListener('click', () => showStep('signature'));
   document.getElementById('btnGeneratePdf').addEventListener('click', createConsentPdf);
-  document.getElementById('btnNewConsent').addEventListener('click', () => showStep('select'));
+  document.getElementById('btnNewConsent').addEventListener('click', () => {
+    resetConsentFlow();
+    showStep('select');
+  });
   document.getElementById('btnSignatureBack').addEventListener('click', () => showStep('form'));
   document.getElementById('btnGoHistory').addEventListener('click', requestHistoryAccess);
   document.getElementById('btnShowHistory').addEventListener('click', requestHistoryAccess);
@@ -170,18 +173,78 @@ function bindEvents() {
 }
 
 function selectConsent(type) {
+  resetConsentFlow();
   App.state.consentType = type;
+  updateReadContinue();
+  const asset = type === 'general' ? 'assets/consentimiento_general.pdf' : 'assets/consentimiento_toxina.pdf';
+  showStep('pdf');
+  renderPdfPreview(asset);
+}
+
+function resetConsentFlow() {
+  resetPatientForm();
+  App.state.consentType = null;
+  document.getElementById('readCheckbox').checked = false;
+  updateReadContinue();
+
+  const viewer = document.getElementById('pdfRenderViewer');
+  if (viewer) {
+    viewer.innerHTML = '';
+  }
+}
+
+function resetPatientForm() {
+  const form = document.getElementById('patientForm');
+  if (form) {
+    form.reset();
+  }
+
+  ['inputNombre', 'inputRut', 'inputFechaNacimiento', 'inputDireccion'].forEach((id) => {
+    const input = document.getElementById(id);
+    if (input) {
+      input.value = '';
+    }
+  });
+
+  document.querySelectorAll('input[name="autorizacion"]').forEach((input) => {
+    input.checked = false;
+  });
+
   App.state.tratamiento = null;
   App.state.tratamientos = [];
   App.state.autorizacion = null;
   App.state.paciente = {};
   App.state.signatureDataUrl = null;
-  App.signaturePad.clear();
-  document.getElementById('readCheckbox').checked = false;
-  updateReadContinue();
-  const asset = type === 'general' ? 'assets/consentimiento_general.pdf' : 'assets/consentimiento_toxina.pdf';
-  showStep('pdf');
-  renderPdfPreview(asset);
+
+  const select = document.getElementById('selectTratamiento');
+  if (select) {
+    select.value = '';
+  }
+
+  if (App.signaturePad) {
+    App.signaturePad.clear();
+  }
+
+  document.getElementById('btnSignatureContinue').disabled = true;
+  renderSelectedTreatments();
+  clearSummary();
+}
+
+function clearSummary() {
+  [
+    'summaryNombre',
+    'summaryRut',
+    'summaryNacimiento',
+    'summaryDireccion',
+    'summaryTipo',
+    'summaryTratamiento',
+    'summaryAutorizacion'
+  ].forEach((id) => {
+    const element = document.getElementById(id);
+    if (element) {
+      element.textContent = '';
+    }
+  });
 }
 
 async function renderPdfPreview(asset) {
@@ -707,6 +770,7 @@ async function createConsentPdf() {
     }
 
     showStep('done');
+    resetConsentFlow();
   } catch (error) {
     console.error(error);
     showMessage('No se pudo generar el PDF', error?.message || 'Revise los datos e intente nuevamente.');
