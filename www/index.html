@@ -29,6 +29,14 @@
 </header>
 <main>
   <section class="step" id="stepSelect">
+    <div class="card select-card assessment-entry-card">
+      <p class="eyebrow">Evaluaci&oacute;n cl&iacute;nica</p>
+      <h2>Autoevaluaci&oacute;n Est&eacute;tica</h2>
+      <p class="section-copy">Complete una breve evaluaci&oacute;n para conocer sus necesidades y objetivos est&eacute;ticos.</p>
+      <div class="actions">
+        <button id="btnStartAssessment">Comenzar</button>
+      </div>
+    </div>
     <div class="card select-card">
       <p class="eyebrow">Documentaci&oacute;n cl&iacute;nica</p>
       <h2>Seleccione el consentimiento</h2>
@@ -36,6 +44,27 @@
       <div class="consent-options">
         <button id="btnGeneral">Consentimiento General</button>
         <button id="btnToxina">Consentimiento Toxina</button>
+      </div>
+    </div>
+  </section>
+  <section class="step hidden" id="stepAssessment">
+    <div class="card">
+      <p class="eyebrow">Autoevaluaci&oacute;n est&eacute;tica</p>
+      <h2>Encuesta de bienestar est&eacute;tico</h2>
+      <p class="assessment-instructions">Por favor, eval&uacute;e cada punto con una puntuaci&oacute;n del 0 al 10, donde 0 significa &ldquo;Nada satisfecha&rdquo; y 10 &ldquo;Totalmente satisfecha&rdquo;.</p>
+      <form id="assessmentForm" class="assessment-form">
+        <label class="form-wide">Nombre completo
+          <input type="text" id="assessmentNombre" required>
+        </label>
+        <div class="assessment-progress" aria-live="polite">
+          <span id="assessmentProgressText">0 de 10 respondidas</span>
+          <div class="assessment-progress-track"><span id="assessmentProgressBar"></span></div>
+        </div>
+        <div id="assessmentQuestions" class="assessment-questions"></div>
+      </form>
+      <div class="actions">
+        <button id="btnAssessmentBack" class="secondary">Volver</button>
+        <button id="btnGenerateAssessment">Generar autoevaluaci&oacute;n</button>
       </div>
     </div>
   </section>
@@ -127,6 +156,7 @@
       <div class="actions">
         <button id="btnNewConsent">Nuevo Consentimiento</button>
         <button id="btnGoHistory" class="secondary">Ver Panel</button>
+        <button id="btnAssessmentHome" class="hidden">Volver al inicio</button>
       </div>
     </div>
   </section>
