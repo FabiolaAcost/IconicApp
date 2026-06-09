@@ -122,13 +122,19 @@ function bindEvents() {
   document.getElementById('btnGeneral').addEventListener('click', () => selectConsent('general'));
   document.getElementById('btnToxina').addEventListener('click', () => selectConsent('toxina'));
   document.getElementById('btnPdfContinue').addEventListener('click', () => showStep('form'));
-  document.getElementById('btnPdfBack').addEventListener('click', () => showStep('select'));
+  document.getElementById('btnPdfBack').addEventListener('click', () => {
+    resetConsentFlow();
+    showStep('select');
+  });
   document.getElementById('readCheckbox').addEventListener('change', updateReadContinue);
   document.getElementById('selectTratamiento').addEventListener('change', onTreatmentSelect);
   document.getElementById('inputRut').addEventListener('input', onRutInput);
   document.getElementById('inputRut').addEventListener('blur', onRutBlur);
   document.getElementById('btnFormContinue').addEventListener('click', onFormContinue);
-  document.getElementById('btnFormBack').addEventListener('click', () => showStep('pdf'));
+  document.getElementById('btnFormBack').addEventListener('click', () => {
+    resetPatientForm();
+    showStep('pdf');
+  });
   document.getElementById('btnClearSignature').addEventListener('click', () => {
     App.signaturePad.clear();
     document.getElementById('btnSignatureContinue').disabled = true;
@@ -136,7 +142,10 @@ function bindEvents() {
   document.getElementById('btnSignatureContinue').addEventListener('click', onSignatureContinue);
   document.getElementById('btnSummaryBack').addEventListener('click', () => showStep('signature'));
   document.getElementById('btnGeneratePdf').addEventListener('click', createConsentPdf);
-  document.getElementById('btnNewConsent').addEventListener('click', () => showStep('select'));
+  document.getElementById('btnNewConsent').addEventListener('click', () => {
+    resetConsentFlow();
+    showStep('select');
+  });
   document.getElementById('btnSignatureBack').addEventListener('click', () => showStep('form'));
   document.getElementById('btnGoHistory').addEventListener('click', requestHistoryAccess);
   document.getElementById('btnShowHistory').addEventListener('click', requestHistoryAccess);
@@ -170,7 +179,28 @@ function bindEvents() {
 }
 
 function selectConsent(type) {
+  resetConsentFlow();
   App.state.consentType = type;
+  updateReadContinue();
+  const asset = type === 'general' ? 'assets/consentimiento_general.pdf' : 'assets/consentimiento_toxina.pdf';
+  document.getElementById('pdfViewer').src = asset;
+  showStep('pdf');
+}
+
+function resetConsentFlow() {
+  App.state.consentType = null;
+  resetPatientForm();
+  document.getElementById('readCheckbox').checked = false;
+  document.getElementById('pdfViewer').src = '';
+  updateReadContinue();
+}
+
+function resetPatientForm() {
+  const form = document.getElementById('patientForm');
+  if (form) {
+    form.reset();
+  }
+
   App.state.tratamiento = null;
   App.state.tratamientos = [];
   App.state.autorizacion = null;
@@ -237,6 +267,33 @@ async function renderPdfIntoViewer(source, viewer, options = {}) {
     console.error('Error renderizando PDF:', error);
     viewer.innerHTML = `<p class="pdf-render-status">${options.errorText || 'No se pudo visualizar el PDF.'}</p>`;
   }
+
+  const select = document.getElementById('selectTratamiento');
+  if (select) {
+    select.value = '';
+  }
+
+  if (App.signaturePad) {
+    App.signaturePad.clear();
+  }
+
+  document.getElementById('btnSignatureContinue').disabled = true;
+  renderSelectedTreatments();
+  clearSummary();
+}
+
+function clearSummary() {
+  [
+    'summaryNombre',
+    'summaryRut',
+    'summaryNacimiento',
+    'summaryDireccion',
+    'summaryTipo',
+    'summaryTratamiento',
+    'summaryAutorizacion'
+  ].forEach((id) => {
+    document.getElementById(id).textContent = '';
+  });
 }
 
 function updateReadContinue() {
@@ -707,6 +764,7 @@ async function createConsentPdf() {
     }
 
     showStep('done');
+    resetConsentFlow();
   } catch (error) {
     console.error(error);
     showMessage('No se pudo generar el PDF', error?.message || 'Revise los datos e intente nuevamente.');
