@@ -40,6 +40,19 @@ const PdfGenerator = (() => {
       firmaDra: { x: 322, y: 172, width: 216, height: 40 }
     }
   };
+  const ASSESSMENT_MARKS = [
+    { id: 'piel', page: 0, y: 535.4 },
+    { id: 'arrugas', page: 0, y: 436.1 },
+    { id: 'grasa', page: 0, y: 336.8 },
+    { id: 'volumen', page: 0, y: 237.6 },
+    { id: 'flacidez', page: 0, y: 138.3 },
+    { id: 'labios', page: 1, y: 706.7 },
+    { id: 'mirada', page: 1, y: 607.4 },
+    { id: 'textura', page: 1, y: 508.1 },
+    { id: 'manchas', page: 1, y: 408.9 },
+    { id: 'hidratacion', page: 1, y: 309.6 }
+  ];
+  const ASSESSMENT_VALUE_X = [107.6, 147.3, 186.9, 226.6, 266.3, 306, 345.7, 385.4, 425.1, 464.7, 504.4];
 
   async function fetchArrayBuffer(url) {
     const embeddedAsset = window.PdfEmbeddedAssets && window.PdfEmbeddedAssets[url];
@@ -248,6 +261,60 @@ const PdfGenerator = (() => {
     return { pdfBytes, fileName };
   }
 
+  async function generateAssessmentPdf(options) {
+    const existingPdfBytes = await fetchArrayBuffer('assets/autoevaluacion.pdf');
+    const pdfDoc = await PDFLib.PDFDocument.load(existingPdfBytes);
+    const pages = pdfDoc.getPages();
+    const font = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+    const page1 = pages[0];
+    const paciente = options.paciente || {};
+    const respuestas = options.respuestas || {};
+
+    page1.drawText(paciente.nombre || '', {
+      x: 166,
+      y: 608.4,
+      size: 11,
+      font,
+      maxWidth: 380
+    });
+
+    ASSESSMENT_MARKS.forEach((mark) => {
+      const value = clampScore(respuestas[mark.id]);
+      const page = pages[mark.page];
+      const x = ASSESSMENT_VALUE_X[value];
+
+      drawCheckMark(page, x, mark.y - 27);
+    });
+
+    const pdfBytes = await pdfDoc.save();
+    return { pdfBytes, fileName: buildAssessmentFileName(options) };
+  }
+
+  function clampScore(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) {
+      return 5;
+    }
+
+    return Math.min(10, Math.max(0, Math.round(number)));
+  }
+
+  function drawCheckMark(page, x, y) {
+    const color = PDFLib.rgb(0.23, 0.18, 0.14);
+    page.drawLine({
+      start: { x: x - 5.8, y: y - 0.8 },
+      end: { x: x - 1.7, y: y - 5.2 },
+      thickness: 2,
+      color
+    });
+    page.drawLine({
+      start: { x: x - 1.7, y: y - 5.2 },
+      end: { x: x + 6.2, y: y + 5.6 },
+      thickness: 2,
+      color
+    });
+  }
+
   function buildFileName(options) {
     const paciente = options.paciente.nombre
       .normalize('NFD')
@@ -257,6 +324,17 @@ const PdfGenerator = (() => {
       .slice(0, 80);
     const timestamp = formatDateForFile(new Date());
     return `${paciente}-${timestamp}.pdf`;
+  }
+
+  function buildAssessmentFileName(options) {
+    const paciente = (options.paciente?.nombre || 'paciente')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 80);
+    const timestamp = formatDateForFile(new Date());
+    return `autoevaluacion-${paciente}-${timestamp}.pdf`;
   }
 
   function formatDate(date) {
@@ -297,6 +375,7 @@ const PdfGenerator = (() => {
 
   return {
     generateConsentPdf,
+    generateAssessmentPdf,
     buildFileName
   };
 })();

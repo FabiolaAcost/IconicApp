@@ -6,6 +6,11 @@ const App = {
     tratamientos: [],
     autorizacion: null,
     paciente: {},
+    assessment: {
+      paciente: '',
+      respuestas: {},
+      touched: {}
+    },
     signatureDataUrl: null,
     historyAccessGranted: false,
     protectedTarget: 'menu'
@@ -14,7 +19,8 @@ const App = {
   historyRecords: [],
   procedures: [],
   pdfRenderToken: 0,
-  previewRecord: null
+  previewRecord: null,
+  pendingFocusTarget: null
 };
 const HISTORY_PIN = '0000';
 const PROCEDURES_STORAGE_KEY = 'iconicProcedimientos';
@@ -32,6 +38,68 @@ const DEFAULT_CONFIG = {
   general: DEFAULT_PROCEDURES,
   toxina: DEFAULT_PROCEDURES
 };
+const ASSESSMENT_QUESTIONS = [
+  {
+    id: 'piel',
+    number: 1,
+    title: 'Cuidado de la Piel',
+    question: '¿Qué tan satisfecha estás con la salud y apariencia general de tu piel?'
+  },
+  {
+    id: 'arrugas',
+    number: 2,
+    title: 'Arrugas o Líneas de Expresión',
+    question: '¿Cómo te sientes respecto a las líneas y arrugas alrededor de los ojos, la frente y la boca?'
+  },
+  {
+    id: 'grasa',
+    number: 3,
+    title: 'Grasa No Deseada',
+    question: '¿Te preocupa la presencia de grasa no deseada en áreas específicas como la barbilla, mejillas o cuello?'
+  },
+  {
+    id: 'volumen',
+    number: 4,
+    title: 'Pérdida de Volumen',
+    question: '¿Notas pérdida de volumen en áreas como las mejillas, labios, zona de ojeras o pómulos?'
+  },
+  {
+    id: 'flacidez',
+    number: 5,
+    title: 'Flacidez',
+    question: '¿Qué tan satisfecha estás con la firmeza de tu piel en el rostro y cuello?'
+  },
+  {
+    id: 'labios',
+    number: 6,
+    title: 'Estructura y Soporte de los Labios',
+    question: '¿Cómo te sientes con respecto a la forma y definición de tus labios?'
+  },
+  {
+    id: 'mirada',
+    number: 7,
+    title: 'Mirada Cansada',
+    question: '¿Te preocupan las ojeras, bolsas bajo los ojos o una apariencia de cansancio en tu mirada?'
+  },
+  {
+    id: 'textura',
+    number: 8,
+    title: 'Textura de la Piel',
+    question: '¿Qué tan satisfecha estás con la suavidad y uniformidad de la textura de tu piel?'
+  },
+  {
+    id: 'manchas',
+    number: 9,
+    title: 'Manchas y Pigmentación',
+    question: '¿Te molestan las manchas, pecas o cambios en la pigmentación de tu piel?'
+  },
+  {
+    id: 'hidratacion',
+    number: 10,
+    title: 'Hidratación',
+    question: '¿Cómo te sientes con respecto a la hidratación y luminosidad de tu piel?'
+  }
+];
 window.addEventListener('DOMContentLoaded', initApp);
 
 async function initApp() {
@@ -119,6 +187,9 @@ function getEnabledProcedures() {
 }
 
 function bindEvents() {
+  document.getElementById('btnStartAssessment').addEventListener('click', startAssessment);
+  document.getElementById('btnAssessmentBack').addEventListener('click', () => showStep('select'));
+  document.getElementById('btnGenerateAssessment').addEventListener('click', createAssessmentPdf);
   document.getElementById('btnGeneral').addEventListener('click', () => selectConsent('general'));
   document.getElementById('btnToxina').addEventListener('click', () => selectConsent('toxina'));
   document.getElementById('btnPdfContinue').addEventListener('click', () => showStep('form'));
@@ -136,6 +207,10 @@ function bindEvents() {
   document.getElementById('btnSignatureContinue').addEventListener('click', onSignatureContinue);
   document.getElementById('btnSummaryBack').addEventListener('click', () => showStep('signature'));
   document.getElementById('btnGeneratePdf').addEventListener('click', createConsentPdf);
+  document.getElementById('btnAssessmentHome').addEventListener('click', () => {
+    resetAssessmentFlow();
+    showStep('select');
+  });
   document.getElementById('btnNewConsent').addEventListener('click', () => {
     resetConsentFlow();
     showStep('select');
@@ -191,6 +266,31 @@ function resetConsentFlow() {
   if (viewer) {
     viewer.innerHTML = '';
   }
+}
+
+function startAssessment() {
+  resetAssessmentFlow();
+  showStep('assessment');
+}
+
+function resetAssessmentFlow() {
+  App.state.assessment = {
+    paciente: '',
+    respuestas: {},
+    touched: {}
+  };
+
+  const form = document.getElementById('assessmentForm');
+  if (form) {
+    form.reset();
+  }
+
+  const container = document.getElementById('assessmentQuestions');
+  if (container) {
+    container.innerHTML = '';
+  }
+
+  renderAssessmentQuestions();
 }
 
 function resetPatientForm() {
@@ -320,6 +420,10 @@ function showStep(stepId) {
     populateTreatmentOptions();
   }
 
+  if (stepId === 'assessment') {
+    renderAssessmentQuestions();
+  }
+
   if (stepId === 'history') {
     refreshHistory();
   }
@@ -420,6 +524,63 @@ function renderSelectedTreatments() {
 
 function getSelectedTreatmentText() {
   return App.state.tratamientos.join(', ');
+}
+
+function renderAssessmentQuestions() {
+  const container = document.getElementById('assessmentQuestions');
+  if (!container || container.children.length) {
+    updateAssessmentProgress();
+    return;
+  }
+
+  ASSESSMENT_QUESTIONS.forEach((item) => {
+    const selectedValue = App.state.assessment.respuestas[item.id] ?? 0;
+    App.state.assessment.respuestas[item.id] = selectedValue;
+
+    const questionCard = document.createElement('article');
+    questionCard.className = 'assessment-question';
+    questionCard.innerHTML = `
+      <h3>${item.number}. ${item.title}</h3>
+      <p>${item.question}</p>
+      <div class="assessment-score">
+        <span>Puntuaci&oacute;n seleccionada</span>
+        <strong id="assessmentScore${item.number}">${selectedValue}</strong>
+      </div>
+      <div class="assessment-slider-row">
+        <span>0</span>
+        <input type="range" min="0" max="10" step="1" value="${selectedValue}" aria-label="${item.title}">
+        <span>10</span>
+      </div>
+    `;
+
+    const slider = questionCard.querySelector('input[type="range"]');
+    slider.addEventListener('input', () => {
+      const value = Number(slider.value);
+      App.state.assessment.respuestas[item.id] = value;
+      App.state.assessment.touched[item.id] = true;
+      questionCard.querySelector(`#assessmentScore${item.number}`).textContent = String(value);
+      updateAssessmentProgress();
+    });
+
+    container.appendChild(questionCard);
+  });
+
+  updateAssessmentProgress();
+}
+
+function updateAssessmentProgress() {
+  const answered = ASSESSMENT_QUESTIONS.filter((item) => App.state.assessment.touched[item.id]).length;
+  const percent = Math.round((answered / ASSESSMENT_QUESTIONS.length) * 100);
+  const progressText = document.getElementById('assessmentProgressText');
+  const progressBar = document.getElementById('assessmentProgressBar');
+
+  if (progressText) {
+    progressText.textContent = `${answered} de ${ASSESSMENT_QUESTIONS.length} respondidas`;
+  }
+
+  if (progressBar) {
+    progressBar.style.width = `${percent}%`;
+  }
 }
 
 function renderProcedureManager() {
@@ -694,7 +855,8 @@ function submitHistoryPin() {
   App.state.protectedTarget = 'menu';
 }
 
-function showMessage(title, message, eyebrow = 'Atención', actionLabel = 'Entendido') {
+function showMessage(title, message, eyebrow = 'Atención', actionLabel = 'Entendido', focusTarget = null) {
+  App.pendingFocusTarget = focusTarget;
   document.getElementById('messageModalEyebrow').textContent = eyebrow;
   document.getElementById('messageModalTitle').textContent = title;
   document.getElementById('messageModalText').textContent = message;
@@ -705,6 +867,31 @@ function showMessage(title, message, eyebrow = 'Atención', actionLabel = 'Enten
 
 function closeMessageModal() {
   document.getElementById('messageModal').classList.add('hidden');
+  focusPendingTarget();
+}
+
+function focusPendingTarget() {
+  const target = App.pendingFocusTarget;
+  App.pendingFocusTarget = null;
+
+  if (!target) {
+    return;
+  }
+
+  setTimeout(() => {
+    const element = typeof target === 'string' ? document.getElementById(target) : target;
+    if (!element) {
+      return;
+    }
+
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => {
+      element.focus({ preventScroll: true });
+      if (typeof element.select === 'function') {
+        element.select();
+      }
+    }, 260);
+  }, 0);
 }
 
 function setBirthDateLimit() {
@@ -769,6 +956,7 @@ async function createConsentPdf() {
       showMessage('PDF generado', 'El consentimiento se descargó correctamente, pero no se pudo guardar en el historial de este dispositivo.');
     }
 
+    setDoneMessage('Consentimiento generado', 'El consentimiento se generó correctamente y se guardó en el historial.');
     showStep('done');
     resetConsentFlow();
   } catch (error) {
@@ -777,6 +965,62 @@ async function createConsentPdf() {
   } finally {
     document.getElementById('btnGeneratePdf').disabled = false;
   }
+}
+
+async function createAssessmentPdf() {
+  const button = document.getElementById('btnGenerateAssessment');
+  const nombreInput = document.getElementById('assessmentNombre');
+  const nombre = nombreInput.value.trim();
+
+  if (!nombre) {
+    showMessage('Datos incompletos', 'Complete todos los campos obligatorios antes de continuar.', 'Atencion', 'Volver a completar', 'assessmentNombre');
+    return;
+  }
+
+  button.disabled = true;
+  try {
+    App.state.assessment.paciente = nombre;
+    const result = await PdfGenerator.generateAssessmentPdf({
+      paciente: { nombre },
+      respuestas: App.state.assessment.respuestas
+    });
+
+    await downloadBlob(new Blob([result.pdfBytes], { type: 'application/pdf' }), result.fileName);
+
+    try {
+      await ConsentStorage.saveConsent({
+        nombre,
+        rut: 'Sin RUT',
+        fecha: formatDate(new Date()),
+        tipo: 'AUTOEVALUACION',
+        tratamiento: 'Autoevaluación estética',
+        autorizacion: '',
+        archivo: result.fileName,
+        pdfBytes: result.pdfBytes
+      });
+      await refreshHistory();
+    } catch (storageError) {
+      console.error('Error guardando historial:', storageError);
+      showMessage('PDF generado', 'La autoevaluación se descargó correctamente, pero no se pudo guardar en el historial de este dispositivo.');
+    }
+
+    setDoneMessage('¡Gracias por completar su autoevaluación!', 'Esta información nos ayudará a comprender mejor sus necesidades y ofrecer una atención más personalizada.', 'assessment');
+    showStep('done');
+    resetAssessmentFlow();
+  } catch (error) {
+    console.error(error);
+    showMessage('No se pudo generar el PDF', error?.message || 'Revise las respuestas e intente nuevamente.');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function setDoneMessage(title, message, mode = 'consent') {
+  document.querySelector('#stepDone h2').textContent = title;
+  document.querySelector('#stepDone > .card > p').textContent = message;
+  document.getElementById('btnNewConsent').classList.toggle('hidden', mode === 'assessment');
+  document.getElementById('btnGoHistory').classList.toggle('hidden', mode === 'assessment');
+  document.getElementById('btnAssessmentHome').classList.toggle('hidden', mode !== 'assessment');
 }
 
 async function downloadBlob(blob, filename) {
@@ -835,23 +1079,25 @@ function renderHistoryList(records) {
   records.forEach((record) => {
     const card = document.createElement('article');
     card.className = 'history-card';
-    card.innerHTML = `
-      <strong>${record.nombre} • ${record.tipo}</strong>
-      <p><strong>Identificaci&oacute;n</strong> ${record.rut}</p>
-      <p><strong>Fecha de emisi&oacute;n</strong> ${record.fecha}</p>
-      <p><strong>Procedimiento</strong> ${record.tratamiento}</p>
-      <p><strong>Documento</strong> ${record.archivo}</p>
-      <div class="history-actions"></div>
-    `;
-    card.innerHTML = `
-      <h3>${record.nombre}</h3>
-      <p class="history-consent">Consentimiento &bull; ${record.tipo}</p>
-      <p><strong>Identificaci&oacute;n</strong> ${record.rut}</p>
-      <p><strong>Fecha de emisi&oacute;n</strong> ${record.fecha}</p>
-      <p><strong>Procedimiento</strong> ${record.tratamiento}</p>
-      <p><strong>Documento</strong> ${record.archivo}</p>
-      <div class="history-actions"></div>
-    `;
+    const documentKind = record.tipo === 'AUTOEVALUACION' ? 'Autoevaluaci&oacute;n est&eacute;tica' : 'Consentimiento';
+    if (record.tipo === 'AUTOEVALUACION') {
+      card.innerHTML = `
+        <h3>${record.nombre}</h3>
+        <p class="history-consent">Autoevaluaci&oacute;n &bull; EST&Eacute;TICA</p>
+        <p><strong>Fecha de emisi&oacute;n</strong> ${formatHistoryDisplayDate(record)}</p>
+        <div class="history-actions"></div>
+      `;
+    } else {
+      card.innerHTML = `
+        <h3>${record.nombre}</h3>
+        <p class="history-consent">${documentKind} &bull; ${record.tipo}</p>
+        <p><strong>Identificaci&oacute;n</strong> ${record.rut}</p>
+        <p><strong>Fecha de emisi&oacute;n</strong> ${record.fecha}</p>
+        <p><strong>Procedimiento</strong> ${record.tratamiento}</p>
+        <p><strong>Documento</strong> ${record.archivo}</p>
+        <div class="history-actions"></div>
+      `;
+    }
     const actions = card.querySelector('.history-actions');
     const btnPreview = document.createElement('button');
     btnPreview.textContent = 'Ver Documento';
@@ -996,6 +1242,27 @@ function getRecordMonthKey(record) {
 
   const match = String(record.fecha || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   return match ? `${match[3]}-${match[2]}` : '';
+}
+
+function formatHistoryDisplayDate(record) {
+  let date = record.createdAt ? new Date(record.createdAt) : null;
+
+  if (!date || Number.isNaN(date.getTime())) {
+    const match = String(record.fecha || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (match) {
+      date = new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]));
+    }
+  }
+
+  if (!date || Number.isNaN(date.getTime())) {
+    return record.fecha || '';
+  }
+
+  return date.toLocaleDateString('es-CL', {
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric'
+  });
 }
 
 function formatDate(date) {
