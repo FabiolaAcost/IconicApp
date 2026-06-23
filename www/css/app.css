@@ -120,6 +120,15 @@ header p {
   flex-wrap: wrap;
 }
 
+.header-actions {
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.header-actions button {
+  width: 116px;
+}
+
 .step {
   margin-bottom: 24px;
 }
@@ -455,7 +464,65 @@ form {
 
 .assessment-slider-row input[type="range"] {
   width: 100%;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  appearance: none;
   accent-color: var(--earth);
+  --slider-fill: 0%;
+  background: transparent;
+  box-shadow: none;
+}
+
+.assessment-slider-row input[type="range"]::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--earth) 0 var(--slider-fill), #ded1bf var(--slider-fill) 100%);
+}
+
+.assessment-slider-row input[type="range"]::-webkit-slider-thumb {
+  width: 22px;
+  height: 22px;
+  margin-top: -7px;
+  border: 3px solid #fffdf8;
+  border-radius: 50%;
+  appearance: none;
+  background: var(--earth);
+  box-shadow: 0 3px 10px rgba(41, 34, 28, 0.22);
+}
+
+.assessment-slider-row input[type="range"]::-moz-range-track {
+  height: 8px;
+  border-radius: 999px;
+  background: #ded1bf;
+}
+
+.assessment-slider-row input[type="range"]::-moz-range-progress {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--earth);
+}
+
+.assessment-slider-row input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border: 3px solid #fffdf8;
+  border-radius: 50%;
+  background: var(--earth);
+  box-shadow: 0 3px 10px rgba(41, 34, 28, 0.22);
+}
+
+.assessment-form .assessment-slider-row input[type="range"]:focus {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.assessment-form .assessment-slider-row input[type="range"]:focus-visible {
+  outline: 2px solid rgba(111, 86, 62, 0.45);
+  outline-offset: 4px;
 }
 
 form label,
@@ -468,6 +535,11 @@ fieldset {
 form .form-wide,
 fieldset {
   grid-column: 1 / -1;
+}
+
+.birthdate-field {
+  display: grid;
+  gap: 0;
 }
 
 form input,
@@ -606,6 +678,46 @@ form input[type="checkbox"]:focus-visible {
 
 .procedure-toggle input:focus-visible + .procedure-switch {
   box-shadow: 0 0 0 4px rgba(154, 127, 99, 0.16);
+}
+
+.select-shell {
+  position: relative;
+  display: block;
+}
+
+.select-shell::after {
+  content: "";
+  position: absolute;
+  top: calc(50% + 3px);
+  right: 16px;
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid var(--earth);
+  border-bottom: 2px solid var(--earth);
+  pointer-events: none;
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.select-shell select {
+  min-height: 54px;
+  padding-right: 46px;
+  appearance: none;
+  background:
+    linear-gradient(180deg, #fffdf8, #fbf3e7);
+  color: var(--ink);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.select-shell select:invalid,
+.select-shell select option[value=""] {
+  color: var(--muted);
+}
+
+.select-shell option {
+  background: #fffdf8;
+  color: var(--ink);
+  font-weight: 700;
 }
 
 .selected-treatments {
@@ -782,6 +894,134 @@ fieldset label {
   gap: 14px;
 }
 
+.history-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 26px;
+  flex-wrap: wrap;
+  margin-top: 24px;
+  padding: 22px 0 26px;
+  border-bottom: 1px solid rgba(229, 216, 199, 0.94);
+}
+
+.history-pagination-summary {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 58px;
+  flex: 1 1 300px;
+  padding-right: clamp(18px, 5vw, 44px);
+  border-right: 1px solid rgba(229, 216, 199, 0.94);
+}
+
+.history-pagination-icon {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  border: 1px solid rgba(154, 127, 99, 0.22);
+  border-radius: 50%;
+  background: rgba(255, 253, 248, 0.76);
+}
+
+.history-pagination-icon::before {
+  content: "";
+  position: absolute;
+  left: 14px;
+  top: 10px;
+  width: 15px;
+  height: 20px;
+  border: 2px solid rgba(111, 86, 62, 0.66);
+  border-radius: 2px;
+  background:
+    linear-gradient(135deg, transparent 0 49%, rgba(111, 86, 62, 0.66) 50% 58%, transparent 59%) 100% 0 / 8px 8px no-repeat;
+}
+
+.history-pagination-icon::after {
+  content: "";
+  position: absolute;
+  left: 18px;
+  top: 18px;
+  width: 10px;
+  height: 7px;
+  border-top: 2px solid rgba(111, 86, 62, 0.5);
+  border-bottom: 2px solid rgba(111, 86, 62, 0.5);
+}
+
+.history-pagination-summary p {
+  margin: 0;
+  color: var(--muted);
+  font-size: clamp(0.95rem, 1.7vw, 1.08rem);
+  font-weight: 700;
+}
+
+.history-pagination-summary strong {
+  color: var(--earth-dark);
+  font-weight: 800;
+}
+
+.history-pagination-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.history-page-indicator {
+  min-width: 138px;
+  min-height: 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 24px;
+  border: 1px solid rgba(229, 216, 199, 0.94);
+  border-radius: var(--radius);
+  background: rgba(244, 234, 219, 0.28);
+  color: var(--earth-dark);
+  font-size: 1.02rem;
+  font-weight: 800;
+  box-shadow: 0 10px 22px rgba(58, 45, 33, 0.04);
+}
+
+.history-page-button {
+  min-width: 150px;
+  min-height: 52px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 12px 22px;
+  border-color: rgba(229, 216, 199, 0.94);
+  background: rgba(255, 253, 248, 0.78);
+  color: var(--earth-dark);
+  font-size: 0.95rem;
+  box-shadow: 0 10px 22px rgba(58, 45, 33, 0.04);
+}
+
+.history-page-button:disabled {
+  border-color: rgba(229, 216, 199, 0.7);
+  background: rgba(244, 234, 219, 0.22);
+  color: rgba(117, 107, 96, 0.42);
+  box-shadow: none;
+}
+
+.history-page-arrow {
+  width: 11px;
+  height: 11px;
+  border-top: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+}
+
+.history-page-arrow-prev {
+  transform: rotate(-135deg);
+}
+
+.history-page-arrow-next {
+  transform: rotate(45deg);
+}
+
 .history-backup-panel {
   display: grid;
   justify-items: start;
@@ -808,10 +1048,6 @@ fieldset label {
   margin-top: 6px;
   padding: 10px 14px;
   font-size: 0.88rem;
-}
-
-#stepHistory > .card > .actions {
-  margin-top: 30px;
 }
 
 .history-card {
@@ -965,11 +1201,34 @@ fieldset label {
     width: 100%;
   }
 
+  .header-actions button {
+    width: 100%;
+  }
+
   .procedure-item {
     display: flex;
   }
 
   .procedure-toggle {
+    width: 100%;
+  }
+
+  .history-pagination {
+    align-items: stretch;
+  }
+
+  .history-pagination-summary {
+    width: 100%;
+    padding-right: 0;
+    border-right: 0;
+  }
+
+  .history-pagination-controls {
+    width: 100%;
+    gap: 10px;
+  }
+
+  .history-page-indicator {
     width: 100%;
   }
 
@@ -1103,5 +1362,9 @@ fieldset label {
   .card,
   header {
     padding: 16px;
+  }
+
+  .header-actions button {
+    width: 100%;
   }
 }

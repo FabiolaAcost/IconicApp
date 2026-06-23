@@ -25,6 +25,7 @@
   </div>
   <div class="header-actions">
     <button id="btnShowHistory" class="secondary">Panel</button>
+    <button id="btnHistoryBackTop" class="secondary hidden">Volver</button>
   </div>
 </header>
 <main>
@@ -94,15 +95,17 @@
         <label>RUT
           <input type="text" id="inputRut" placeholder="12345678-9" required>
         </label>
-        <label>Fecha de nacimiento
-          <input type="date" id="inputFechaNacimiento" required>
+        <label class="birthdate-field form-wide">Fecha de nacimiento
+          <input type="text" id="inputFechaNacimiento" inputmode="numeric" autocomplete="bday" maxlength="10" placeholder="DD/MM/AAAA" required>
         </label>
         <label class="form-wide">Direcci&oacute;n
           <input type="text" id="inputDireccion" required>
         </label>
         <div id="treatmentContainer" class="form-wide">
           <label>Tratamiento
-            <select id="selectTratamiento"></select>
+            <span class="select-shell">
+              <select id="selectTratamiento" required></select>
+            </span>
           </label>
           <div id="selectedTreatments" class="selected-treatments" aria-live="polite"></div>
         </div>
@@ -207,13 +210,11 @@
         </div>
       </div>
       <div id="historyList" class="history-list"></div>
+      <div id="historyPagination" class="history-pagination" aria-live="polite"></div>
       <div class="history-backup-panel">
         <p class="eyebrow">Respaldo general</p>
         <p>Exporte todos los registros almacenados del historial cl&iacute;nico.</p>
         <button id="btnExportBackup">Exportar historial completo</button>
-      </div>
-      <div class="actions">
-        <button id="btnHistoryBack" class="secondary">Volver</button>
       </div>
     </div>
   </section>

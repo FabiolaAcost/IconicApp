@@ -13,7 +13,8 @@ const App = {
     },
     signatureDataUrl: null,
     historyAccessGranted: false,
-    protectedTarget: 'menu'
+    protectedTarget: 'menu',
+    historyPage: 1
   },
   signaturePad: null,
   historyRecords: [],
@@ -31,8 +32,10 @@ const DEFAULT_PROCEDURES = [
   'Radiesse',
   'Stimulate',
   'Polinucleotidos',
-  'Mallas PDO'
+  'Mallas PDO',
+  'Hialuronidasa y Colagenasa'
 ];
+const HISTORY_PAGE_SIZE = 6;
 const DEFAULT_CONFIG = {
   doctora: 'Patricia Navarrete',
   general: DEFAULT_PROCEDURES,
@@ -165,6 +168,11 @@ function loadStoredProcedures(defaultProcedures) {
         enabled: storedProcedure ? storedProcedure.enabled : true
       };
     });
+    storedProcedures.forEach((procedure) => {
+      if (!procedures.some((item) => normalizeProcedureName(item.name) === normalizeProcedureName(procedure.name))) {
+        procedures.push(procedure);
+      }
+    });
 
     localStorage.setItem(PROCEDURES_STORAGE_KEY, JSON.stringify(procedures));
     return procedures;
@@ -198,6 +206,8 @@ function bindEvents() {
   document.getElementById('selectTratamiento').addEventListener('change', onTreatmentSelect);
   document.getElementById('inputRut').addEventListener('input', onRutInput);
   document.getElementById('inputRut').addEventListener('blur', onRutBlur);
+  document.getElementById('inputFechaNacimiento').addEventListener('input', onBirthDateInput);
+  document.getElementById('inputFechaNacimiento').addEventListener('blur', onBirthDateBlur);
   document.getElementById('btnFormContinue').addEventListener('click', onFormContinue);
   document.getElementById('btnFormBack').addEventListener('click', () => showStep('pdf'));
   document.getElementById('btnClearSignature').addEventListener('click', () => {
@@ -228,9 +238,15 @@ function bindEvents() {
       addProcedure();
     }
   });
-  document.getElementById('btnHistoryBack').addEventListener('click', () => openProtectedStep('menu'));
-  document.getElementById('historySearch').addEventListener('input', refreshHistory);
-  document.getElementById('historyMonth').addEventListener('change', refreshHistory);
+  document.getElementById('btnHistoryBackTop').addEventListener('click', () => openProtectedStep('menu'));
+  document.getElementById('historySearch').addEventListener('input', () => {
+    App.state.historyPage = 1;
+    refreshHistory();
+  });
+  document.getElementById('historyMonth').addEventListener('change', () => {
+    App.state.historyPage = 1;
+    refreshHistory();
+  });
   document.getElementById('btnExportBackup').addEventListener('click', exportBackup);
   document.getElementById('btnExportMonth').addEventListener('click', exportMonthBackup);
   document.getElementById('btnDeleteMonth').addEventListener('click', deleteMonthRecords);
@@ -305,7 +321,6 @@ function resetPatientForm() {
       input.value = '';
     }
   });
-
   document.querySelectorAll('input[name="autorizacion"]').forEach((input) => {
     input.checked = false;
   });
@@ -414,6 +429,7 @@ function showStep(stepId) {
 
   document.querySelectorAll('.step').forEach((section) => section.classList.add('hidden'));
   document.getElementById(`step${capitalize(stepId)}`).classList.remove('hidden');
+  document.getElementById('btnHistoryBackTop').classList.toggle('hidden', stepId !== 'history');
   App.state.historyAccessGranted = false;
 
   if (stepId === 'form') {
@@ -448,13 +464,16 @@ function capitalize(value) {
 function populateTreatmentOptions() {
   const container = document.getElementById('treatmentContainer');
   const select = document.getElementById('selectTratamiento');
-  select.innerHTML = '';
+  if (!container || !select) {
+    return;
+  }
 
   container.style.display = 'block';
   const enabledProcedures = getEnabledProcedures();
   const enabledProcedureSet = new Set(enabledProcedures);
   App.state.tratamientos = App.state.tratamientos.filter((treatment) => enabledProcedureSet.has(treatment));
   App.state.tratamiento = getSelectedTreatmentText();
+  select.innerHTML = '';
 
   const placeholder = document.createElement('option');
   placeholder.value = '';
@@ -463,12 +482,19 @@ function populateTreatmentOptions() {
   placeholder.selected = true;
   select.appendChild(placeholder);
 
+  if (!enabledProcedures.length) {
+    renderSelectedTreatments();
+    return;
+  }
+
   enabledProcedures.forEach((treatment) => {
     const option = document.createElement('option');
     option.value = treatment;
     option.textContent = treatment;
+    option.disabled = App.state.tratamientos.includes(treatment);
     select.appendChild(option);
   });
+  select.value = '';
   renderSelectedTreatments();
 }
 
@@ -482,13 +508,14 @@ function onTreatmentSelect(event) {
   App.state.tratamientos.push(treatment);
   App.state.tratamiento = getSelectedTreatmentText();
   event.target.value = '';
+  populateTreatmentOptions();
   renderSelectedTreatments();
 }
 
 function removeTreatment(treatment) {
   App.state.tratamientos = App.state.tratamientos.filter((selected) => selected !== treatment);
   App.state.tratamiento = getSelectedTreatmentText();
-  renderSelectedTreatments();
+  populateTreatmentOptions();
 }
 
 function renderSelectedTreatments() {
@@ -554,11 +581,13 @@ function renderAssessmentQuestions() {
     `;
 
     const slider = questionCard.querySelector('input[type="range"]');
+    updateAssessmentSliderFill(slider);
     slider.addEventListener('input', () => {
       const value = Number(slider.value);
       App.state.assessment.respuestas[item.id] = value;
       App.state.assessment.touched[item.id] = true;
       questionCard.querySelector(`#assessmentScore${item.number}`).textContent = String(value);
+      updateAssessmentSliderFill(slider);
       updateAssessmentProgress();
     });
 
@@ -566,6 +595,14 @@ function renderAssessmentQuestions() {
   });
 
   updateAssessmentProgress();
+}
+
+function updateAssessmentSliderFill(slider) {
+  const min = Number(slider.min || 0);
+  const max = Number(slider.max || 100);
+  const value = Number(slider.value || 0);
+  const percent = max === min ? 0 : ((value - min) / (max - min)) * 100;
+  slider.style.setProperty('--slider-fill', `${Math.min(Math.max(percent, 0), 100)}%`);
 }
 
 function updateAssessmentProgress() {
@@ -707,13 +744,44 @@ function onFormContinue() {
   const nombre = document.getElementById('inputNombre').value.trim();
   const rutInput = document.getElementById('inputRut');
   const rut = formatRut(rutInput.value);
-  const nacimiento = document.getElementById('inputFechaNacimiento').value;
+  const birthInput = document.getElementById('inputFechaNacimiento');
+  const nacimiento = parseBirthDateInput(birthInput.value);
   const direccion = document.getElementById('inputDireccion').value.trim();
   const autorizacion = document.querySelector('input[name="autorizacion"]:checked');
   const treatment = getSelectedTreatmentText();
 
-  if (!nombre || !rut || !nacimiento || !direccion || !treatment || !autorizacion) {
-    showMessage('Datos incompletos', 'Complete todos los campos obligatorios antes de continuar.', 'Atencion', 'Volver a completar');
+  if (!nombre) {
+    showMessage('Datos incompletos', 'Ingrese el nombre completo del paciente.', 'Atencion', 'Volver a completar', 'inputNombre');
+    return;
+  }
+
+  if (!rut) {
+    showMessage('Datos incompletos', 'Ingrese el RUT del paciente.', 'Atencion', 'Volver a completar', 'inputRut');
+    return;
+  }
+
+  if (!birthInput.value.trim()) {
+    showMessage('Datos incompletos', 'Ingrese la fecha de nacimiento del paciente.', 'Atencion', 'Volver a completar', 'inputFechaNacimiento');
+    return;
+  }
+
+  if (!direccion) {
+    showMessage('Datos incompletos', 'Ingrese la direccion del paciente.', 'Atencion', 'Volver a completar', 'inputDireccion');
+    return;
+  }
+
+  if (!treatment) {
+    showMessage('Tratamiento requerido', 'Seleccione al menos un procedimiento para continuar.', 'Atencion', 'Seleccionar tratamiento');
+    return;
+  }
+
+  if (!autorizacion) {
+    showMessage('Datos incompletos', 'Seleccione si autoriza o no el uso de imagen.', 'Atencion', 'Volver a completar');
+    return;
+  }
+
+  if (!isValidBirthDateInput(birthInput.value)) {
+    showMessage('Fecha no valida', 'Ingrese una fecha de nacimiento valida con formato DD/MM/AAAA.', 'Atencion', 'Corregir fecha', 'inputFechaNacimiento');
     return;
   }
 
@@ -729,6 +797,7 @@ function onFormContinue() {
     return;
   }
 
+  birthInput.value = formatBirthDateMask(birthInput.value);
   rutInput.value = rut;
   App.state.paciente = {
     nombre,
@@ -752,6 +821,57 @@ function onRutInput(event) {
 
 function onRutBlur(event) {
   event.target.value = formatRut(event.target.value);
+}
+
+function onBirthDateInput(event) {
+  event.target.value = formatBirthDateMask(event.target.value);
+}
+
+function onBirthDateBlur(event) {
+  event.target.value = formatBirthDateMask(event.target.value);
+}
+
+function formatBirthDateMask(value) {
+  const digits = String(value || '').replace(/\D/g, '').slice(0, 8);
+  const parts = [];
+
+  if (digits.length > 0) {
+    parts.push(digits.slice(0, 2));
+  }
+  if (digits.length > 2) {
+    parts.push(digits.slice(2, 4));
+  }
+  if (digits.length > 4) {
+    parts.push(digits.slice(4, 8));
+  }
+
+  return parts.join('/');
+}
+
+function parseBirthDateInput(value) {
+  const match = String(value || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) {
+    return '';
+  }
+
+  return `${match[3]}-${match[2]}-${match[1]}`;
+}
+
+function isValidBirthDateInput(value) {
+  const match = String(value || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) {
+    return false;
+  }
+
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+
+  return date.getFullYear() === year
+    && date.getMonth() === month - 1
+    && date.getDate() === day
+    && year >= 1900;
 }
 
 function cleanRut(value) {
@@ -897,8 +1017,109 @@ function focusPendingTarget() {
 function setBirthDateLimit() {
   const input = document.getElementById('inputFechaNacimiento');
   if (input) {
-    input.max = getTodayInputValue();
+    input.placeholder = 'DD/MM/AAAA';
   }
+}
+
+function populateBirthDateSelectors() {
+  const daySelect = document.getElementById('birthDay');
+  const monthSelect = document.getElementById('birthMonth');
+  const yearSelect = document.getElementById('birthYear');
+  if (!daySelect || !monthSelect || !yearSelect) {
+    return;
+  }
+
+  fillPlaceholderOption(daySelect, 'Día');
+  fillPlaceholderOption(monthSelect, 'Mes');
+  fillPlaceholderOption(yearSelect, 'Año');
+
+  const months = [
+    'Enero',
+    'Febrero',
+    'Marzo',
+    'Abril',
+    'Mayo',
+    'Junio',
+    'Julio',
+    'Agosto',
+    'Septiembre',
+    'Octubre',
+    'Noviembre',
+    'Diciembre'
+  ];
+
+  months.forEach((name, index) => {
+    const option = document.createElement('option');
+    option.value = String(index + 1).padStart(2, '0');
+    option.textContent = name;
+    monthSelect.appendChild(option);
+  });
+
+  const currentYear = new Date().getFullYear();
+  for (let year = currentYear; year >= 1900; year -= 1) {
+    const option = document.createElement('option');
+    option.value = String(year);
+    option.textContent = String(year);
+    yearSelect.appendChild(option);
+  }
+
+  populateBirthDayOptions();
+}
+
+function fillPlaceholderOption(select, label) {
+  select.innerHTML = '';
+  const option = document.createElement('option');
+  option.value = '';
+  option.textContent = label;
+  option.disabled = true;
+  option.selected = true;
+  select.appendChild(option);
+}
+
+function onBirthDateChange(event) {
+  if (event.target.id === 'birthMonth' || event.target.id === 'birthYear') {
+    populateBirthDayOptions();
+  }
+  updateBirthDateInput();
+}
+
+function populateBirthDayOptions() {
+  const daySelect = document.getElementById('birthDay');
+  const monthSelect = document.getElementById('birthMonth');
+  const yearSelect = document.getElementById('birthYear');
+  if (!daySelect || !monthSelect || !yearSelect) {
+    return;
+  }
+
+  const selectedDay = daySelect.value;
+  const month = Number(monthSelect.value || 1);
+  const year = Number(yearSelect.value || new Date().getFullYear());
+  const daysInMonth = new Date(year, month, 0).getDate();
+
+  fillPlaceholderOption(daySelect, 'Día');
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const option = document.createElement('option');
+    option.value = String(day).padStart(2, '0');
+    option.textContent = String(day).padStart(2, '0');
+    daySelect.appendChild(option);
+  }
+
+  if (selectedDay && Number(selectedDay) <= daysInMonth) {
+    daySelect.value = selectedDay;
+  }
+}
+
+function updateBirthDateInput() {
+  const day = document.getElementById('birthDay')?.value || '';
+  const month = document.getElementById('birthMonth')?.value || '';
+  const year = document.getElementById('birthYear')?.value || '';
+  const input = document.getElementById('inputFechaNacimiento');
+  if (!input) {
+    return '';
+  }
+
+  input.value = day && month && year ? `${year}-${month}-${day}` : '';
+  return input.value;
 }
 
 function isFutureDateInput(value) {
@@ -1054,29 +1275,28 @@ function blobToBase64(blob) {
 
 async function refreshHistory() {
   App.historyRecords = await ConsentStorage.getAllConsents();
-  const query = document.getElementById('historySearch').value.trim().toLowerCase();
-  const selectedMonth = document.getElementById('historyMonth').value;
-  const filtered = App.historyRecords.filter((record) => {
-    const matchesSearch = [record.nombre, record.rut, record.fecha, record.tipo, record.tratamiento]
-      .join(' ')
-      .toLowerCase()
-      .includes(query);
-    const matchesMonth = !selectedMonth || getRecordMonthKey(record) === selectedMonth;
-    return matchesSearch && matchesMonth;
-  });
-  renderHistoryList(filtered);
+  renderHistoryList(getFilteredHistoryRecords());
 }
 
 function renderHistoryList(records) {
   const list = document.getElementById('historyList');
+  const pagination = document.getElementById('historyPagination');
   list.innerHTML = '';
+  if (pagination) {
+    pagination.innerHTML = '';
+  }
 
   if (!records.length) {
     list.innerHTML = '<p>No hay registros en el historial.</p>';
     return;
   }
 
-  records.forEach((record) => {
+  const totalPages = Math.ceil(records.length / HISTORY_PAGE_SIZE);
+  App.state.historyPage = Math.min(Math.max(App.state.historyPage, 1), totalPages);
+  const startIndex = (App.state.historyPage - 1) * HISTORY_PAGE_SIZE;
+  const visibleRecords = records.slice(startIndex, startIndex + HISTORY_PAGE_SIZE);
+
+  visibleRecords.forEach((record) => {
     const card = document.createElement('article');
     card.className = 'history-card';
     const documentKind = record.tipo === 'AUTOEVALUACION' ? 'Autoevaluaci&oacute;n est&eacute;tica' : 'Consentimiento';
@@ -1108,7 +1328,8 @@ function renderHistoryList(records) {
     btnDownload.className = 'secondary';
     btnDownload.textContent = 'Descargar';
     btnDownload.addEventListener('click', async () => {
-      await downloadBlob(new Blob([record.pdfBytes], { type: 'application/pdf' }), record.archivo);
+      const bytes = normalizePdfBytes(record.pdfBytes);
+      await downloadBlob(new Blob([bytes], { type: 'application/pdf' }), record.archivo);
     });
     actions.appendChild(btnDownload);
     const btnDelete = document.createElement('button');
@@ -1117,6 +1338,68 @@ function renderHistoryList(records) {
     btnDelete.addEventListener('click', () => deleteHistoryRecord(record));
     actions.appendChild(btnDelete);
     list.appendChild(card);
+  });
+
+  renderHistoryPagination(records.length, totalPages);
+}
+
+function renderHistoryPagination(totalRecords, totalPages) {
+  const pagination = document.getElementById('historyPagination');
+  if (!pagination || totalPages <= 1) {
+    return;
+  }
+
+  const page = App.state.historyPage;
+  const endRecord = Math.min(page * HISTORY_PAGE_SIZE, totalRecords);
+
+  const summary = document.createElement('div');
+  summary.className = 'history-pagination-summary';
+  summary.innerHTML = `
+    <span class="history-pagination-icon" aria-hidden="true"></span>
+    <p>Mostrando <strong>${endRecord} de ${totalRecords}</strong> documentos</p>
+  `;
+
+  const controls = document.createElement('div');
+  controls.className = 'history-pagination-controls';
+
+  const previousButton = document.createElement('button');
+  previousButton.type = 'button';
+  previousButton.className = 'secondary history-page-button';
+  previousButton.innerHTML = '<span class="history-page-arrow history-page-arrow-prev" aria-hidden="true"></span><span>Anterior</span>';
+  previousButton.disabled = page === 1;
+  previousButton.addEventListener('click', () => {
+    App.state.historyPage -= 1;
+    renderHistoryList(getFilteredHistoryRecords());
+  });
+
+  const pageLabel = document.createElement('span');
+  pageLabel.className = 'history-page-indicator';
+  pageLabel.textContent = `${page} / ${totalPages}`;
+
+  const nextButton = document.createElement('button');
+  nextButton.type = 'button';
+  nextButton.className = 'secondary history-page-button';
+  nextButton.innerHTML = '<span>Siguiente</span><span class="history-page-arrow history-page-arrow-next" aria-hidden="true"></span>';
+  nextButton.disabled = page === totalPages;
+  nextButton.addEventListener('click', () => {
+    App.state.historyPage += 1;
+    renderHistoryList(getFilteredHistoryRecords());
+  });
+
+  controls.append(previousButton, pageLabel, nextButton);
+  pagination.append(summary, controls);
+}
+
+function getFilteredHistoryRecords() {
+  const query = document.getElementById('historySearch').value.trim().toLowerCase();
+  const selectedMonth = document.getElementById('historyMonth').value;
+  return App.historyRecords.filter((record) => {
+    const matchesSearch = [record.nombre, record.rut, record.fecha, record.tipo, record.tratamiento]
+      .join(' ')
+      .toLowerCase()
+      .includes(query);
+    const matchesMonth = !selectedMonth || getRecordMonthKey(record) === selectedMonth;
+    return matchesSearch && matchesMonth;
   });
 }
 
@@ -1127,6 +1410,11 @@ async function openDocumentPreview(record) {
 
   const viewer = document.getElementById('historyPdfViewer');
   const bytes = normalizePdfBytes(record.pdfBytes);
+  if (!bytes.length) {
+    viewer.innerHTML = '<p class="pdf-render-status">Este registro no tiene un PDF guardado para previsualizar.</p>';
+    return;
+  }
+
   await renderPdfIntoViewer({ data: bytes }, viewer, {
     loadingText: 'Cargando documento firmado...',
     errorText: 'No se pudo previsualizar este documento.'
@@ -1144,10 +1432,15 @@ async function downloadPreviewDocument() {
     return;
   }
 
-  await downloadBlob(new Blob([App.previewRecord.pdfBytes], { type: 'application/pdf' }), App.previewRecord.archivo);
+  const bytes = normalizePdfBytes(App.previewRecord.pdfBytes);
+  await downloadBlob(new Blob([bytes], { type: 'application/pdf' }), App.previewRecord.archivo);
 }
 
 function normalizePdfBytes(pdfBytes) {
+  if (!pdfBytes) {
+    return new Uint8Array();
+  }
+
   if (pdfBytes instanceof Uint8Array) {
     return new Uint8Array(pdfBytes);
   }
@@ -1156,7 +1449,40 @@ function normalizePdfBytes(pdfBytes) {
     return new Uint8Array(pdfBytes.slice(0));
   }
 
-  return new Uint8Array(pdfBytes);
+  if (Array.isArray(pdfBytes)) {
+    return new Uint8Array(pdfBytes);
+  }
+
+  if (typeof pdfBytes === 'string') {
+    const base64 = pdfBytes.includes(',') ? pdfBytes.split(',').pop() : pdfBytes;
+    try {
+      return Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+    } catch (error) {
+      console.error('PDF guardado con formato de texto no valido:', error);
+      return new Uint8Array();
+    }
+  }
+
+  if (typeof pdfBytes === 'object') {
+    if (Array.isArray(pdfBytes.data)) {
+      return new Uint8Array(pdfBytes.data);
+    }
+
+    if (pdfBytes.buffer instanceof ArrayBuffer) {
+      const offset = pdfBytes.byteOffset || 0;
+      const length = pdfBytes.byteLength || pdfBytes.buffer.byteLength;
+      return new Uint8Array(pdfBytes.buffer.slice(offset, offset + length));
+    }
+
+    const numericKeys = Object.keys(pdfBytes)
+      .filter((key) => /^\d+$/.test(key))
+      .sort((a, b) => Number(a) - Number(b));
+    if (numericKeys.length) {
+      return new Uint8Array(numericKeys.map((key) => pdfBytes[key]));
+    }
+  }
+
+  return new Uint8Array();
 }
 
 async function exportBackup() {
@@ -1186,7 +1512,10 @@ async function exportRecords(records, fileName, folderName) {
   const consentFolder = zip.folder(folderName || 'consentimientos');
 
   records.forEach((record) => {
-    consentFolder.file(record.archivo, record.pdfBytes);
+    const bytes = normalizePdfBytes(record.pdfBytes);
+    if (bytes.length) {
+      consentFolder.file(record.archivo, bytes);
+    }
   });
 
   const content = await zip.generateAsync({ type: 'blob' });
