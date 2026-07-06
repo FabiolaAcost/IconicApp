@@ -47,6 +47,14 @@
         <button id="btnToxina">Consentimiento Toxina</button>
       </div>
     </div>
+    <div class="card select-card">
+      <p class="eyebrow">Evaluaci&oacute;n Skin Lab</p>
+      <h2>Dise&ntilde;emos tu Tratamiento</h2>
+      <p class="section-copy">Completa una breve evaluaci&oacute;n para conocer tus objetivos y personalizar tu experiencia Skin Lab.</p>
+      <div class="actions">
+        <button id="btnStartSkinLab">Comenzar</button>
+      </div>
+    </div>
   </section>
   <section class="step hidden" id="stepAssessment">
     <div class="card">
@@ -66,6 +74,39 @@
       <div class="actions">
         <button id="btnAssessmentBack" class="secondary">Volver</button>
         <button id="btnGenerateAssessment">Generar autoevaluaci&oacute;n</button>
+      </div>
+    </div>
+  </section>
+  <section class="step hidden" id="stepSkinLab">
+    <div class="card">
+      <p class="eyebrow">SKIN LAB</p>
+      <h2>Objetivos del Tratamiento</h2>
+      <p class="section-copy">Cada piel tiene objetivos diferentes. Cu&eacute;ntanos qu&eacute; te gustar&iacute;a mejorar para ofrecerte una experiencia personalizada.</p>
+      <form id="skinLabForm" class="skin-lab-form">
+        <label>Nombre completo
+          <input type="text" id="skinLabNombre" required>
+        </label>
+        <label>Edad
+          <input type="text" id="skinLabEdad" inputmode="numeric" pattern="[0-9]*" required>
+        </label>
+        <fieldset class="skin-lab-fieldset form-wide">
+          <legend>&iquest;Qu&eacute; te gustar&iacute;a mejorar de tu piel?</legend>
+          <div id="skinLabGoals" class="skin-lab-options" aria-label="Objetivos de piel"></div>
+        </fieldset>
+        <label class="form-wide skin-lab-textarea-label">
+          <span>&iquest;Qu&eacute; es lo que m&aacute;s te preocupa actualmente de tu piel?</span>
+          <span class="field-help">Ejemplo: manchas posteriores al acn&eacute;, sensaci&oacute;n de sequedad, exceso de brillo o falta de luminosidad.</span>
+          <textarea id="skinLabConcern" rows="5" required></textarea>
+        </label>
+        <label class="form-wide skin-lab-textarea-label">
+          <span>&iquest;Hay algo que te gustar&iacute;a que consider&aacute;ramos durante tu tratamiento?</span>
+          <span class="field-help">Ejemplo: alergias, tratamientos recientes, embarazo, sensibilidad a productos o eventos pr&oacute;ximos.</span>
+          <textarea id="skinLabConsiderations" rows="5"></textarea>
+        </label>
+      </form>
+      <div class="actions">
+        <button id="btnSkinLabBack" class="secondary">Volver</button>
+        <button id="btnGenerateSkinLab">Generar evaluaci&oacute;n</button>
       </div>
     </div>
   </section>
@@ -171,6 +212,7 @@
       <div class="menu-options">
         <button id="btnMenuHistory">Historial Cl&iacute;nico</button>
         <button id="btnMenuProcedures" class="secondary">Gesti&oacute;n de Procedimientos</button>
+        <button id="btnMenuSkinLab" class="secondary menu-wide">SKIN LAB</button>
       </div>
       <div class="actions">
         <button id="btnMenuBack" class="secondary">Cerrar Panel</button>
@@ -194,19 +236,11 @@
   </section>
   <section class="step hidden" id="stepHistory">
     <div class="card">
-      <h2>Documentaci&oacute;n Cl&iacute;nica</h2>
+      <h2 id="historyTitle">Documentaci&oacute;n Cl&iacute;nica</h2>
       <div class="history-controls">
         <div class="history-control-block history-search-block">
           <label for="historySearch">B&uacute;squeda</label>
           <input type="search" id="historySearch" placeholder="Buscar paciente, procedimiento o RUT">
-        </div>
-        <div class="history-control-block history-month-block">
-          <label for="historyMonth">Filtro mensual</label>
-          <div class="history-control-row">
-            <input type="month" id="historyMonth" aria-label="Mes del historial">
-            <button id="btnExportMonth" class="secondary">Exportar mes</button>
-            <button id="btnDeleteMonth" class="danger subtle-danger">Eliminar mes</button>
-          </div>
         </div>
       </div>
       <div id="historyList" class="history-list"></div>

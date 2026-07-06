@@ -11,10 +11,14 @@ const App = {
       respuestas: {},
       touched: {}
     },
+    skinLab: {
+      goals: []
+    },
     signatureDataUrl: null,
     historyAccessGranted: false,
     protectedTarget: 'menu',
-    historyPage: 1
+    historyPage: 1,
+    historyArea: 'clinical'
   },
   signaturePad: null,
   historyRecords: [],
@@ -103,6 +107,36 @@ const ASSESSMENT_QUESTIONS = [
     question: '¿Cómo te sientes con respecto a la hidratación y luminosidad de tu piel?'
   }
 ];
+const SKIN_LAB_GOALS = [
+  'Acne o brotes',
+  'Manchas',
+  'Deshidratacion',
+  'Poros visibles',
+  'Lineas finas o arrugas',
+  'Flacidez',
+  'Falta de luminosidad'
+];
+const SKIN_LAB_GOAL_META = {
+  'Acne o brotes': 'Acn&eacute; o brotes',
+  Manchas: 'Manchas',
+  Deshidratacion: 'Deshidrataci&oacute;n',
+  'Poros visibles': 'Poros visibles',
+  'Lineas finas o arrugas': 'L&iacute;neas finas<br>o arrugas',
+  Flacidez: 'Flacidez',
+  'Falta de luminosidad': 'Falta de<br>luminosidad'
+};
+const ASSESSMENT_TO_SKINLAB_GOAL_MAP = {
+  piel: 'Falta de luminosidad',
+  arrugas: 'Lineas finas o arrugas',
+  grasa: 'Poros visibles',
+  volumen: 'Flacidez',
+  flacidez: 'Flacidez',
+  labios: 'Lineas finas o arrugas',
+  mirada: 'Falta de luminosidad',
+  textura: 'Poros visibles',
+  manchas: 'Manchas',
+  hidratacion: 'Deshidratacion'
+};
 window.addEventListener('DOMContentLoaded', initApp);
 
 async function initApp() {
@@ -196,8 +230,11 @@ function getEnabledProcedures() {
 
 function bindEvents() {
   document.getElementById('btnStartAssessment').addEventListener('click', startAssessment);
+  document.getElementById('btnStartSkinLab').addEventListener('click', startSkinLab);
   document.getElementById('btnAssessmentBack').addEventListener('click', () => showStep('select'));
   document.getElementById('btnGenerateAssessment').addEventListener('click', createAssessmentPdf);
+  document.getElementById('btnSkinLabBack').addEventListener('click', () => showStep('select'));
+  document.getElementById('btnGenerateSkinLab').addEventListener('click', createSkinLabPdf);
   document.getElementById('btnGeneral').addEventListener('click', () => selectConsent('general'));
   document.getElementById('btnToxina').addEventListener('click', () => selectConsent('toxina'));
   document.getElementById('btnPdfContinue').addEventListener('click', () => showStep('form'));
@@ -228,8 +265,9 @@ function bindEvents() {
   document.getElementById('btnSignatureBack').addEventListener('click', () => showStep('form'));
   document.getElementById('btnGoHistory').addEventListener('click', requestHistoryAccess);
   document.getElementById('btnShowHistory').addEventListener('click', requestHistoryAccess);
-  document.getElementById('btnMenuHistory').addEventListener('click', () => openProtectedStep('history'));
+  document.getElementById('btnMenuHistory').addEventListener('click', () => openHistoryArea('clinical'));
   document.getElementById('btnMenuProcedures').addEventListener('click', () => openProtectedStep('procedures'));
+  document.getElementById('btnMenuSkinLab').addEventListener('click', () => openHistoryArea('skinLab'));
   document.getElementById('btnMenuBack').addEventListener('click', () => showStep('select'));
   document.getElementById('btnProceduresBack').addEventListener('click', () => openProtectedStep('menu'));
   document.getElementById('btnAddProcedure').addEventListener('click', addProcedure);
@@ -243,13 +281,7 @@ function bindEvents() {
     App.state.historyPage = 1;
     refreshHistory();
   });
-  document.getElementById('historyMonth').addEventListener('change', () => {
-    App.state.historyPage = 1;
-    refreshHistory();
-  });
   document.getElementById('btnExportBackup').addEventListener('click', exportBackup);
-  document.getElementById('btnExportMonth').addEventListener('click', exportMonthBackup);
-  document.getElementById('btnDeleteMonth').addEventListener('click', deleteMonthRecords);
   document.getElementById('btnPinCancel').addEventListener('click', closePinModal);
   document.getElementById('btnPinSubmit').addEventListener('click', submitHistoryPin);
   document.getElementById('pinInput').addEventListener('input', onPinInput);
@@ -289,6 +321,17 @@ function startAssessment() {
   showStep('assessment');
 }
 
+function startSkinLab() {
+  resetSkinLabFlow();
+  showStep('skinLab');
+}
+
+function openHistoryArea(area) {
+  App.state.historyArea = area;
+  App.state.historyPage = 1;
+  openProtectedStep('history');
+}
+
 function resetAssessmentFlow() {
   App.state.assessment = {
     paciente: '',
@@ -307,6 +350,40 @@ function resetAssessmentFlow() {
   }
 
   renderAssessmentQuestions();
+}
+
+function resetSkinLabFlow() {
+  App.state.skinLab = {
+    goals: []
+  };
+
+  const form = document.getElementById('skinLabForm');
+  if (form) {
+    form.reset();
+  }
+
+  const derived = deriveSkinLabDataFromAssessment();
+  if (derived) {
+    const nombreInput = document.getElementById('skinLabNombre');
+    const concernInput = document.getElementById('skinLabConcern');
+    const considerationsInput = document.getElementById('skinLabConsiderations');
+
+    if (nombreInput && !nombreInput.value.trim()) {
+      nombreInput.value = derived.nombre;
+    }
+
+    if (concernInput && !concernInput.value.trim()) {
+      concernInput.value = derived.concern;
+    }
+
+    if (considerationsInput && !considerationsInput.value.trim()) {
+      considerationsInput.value = derived.considerations;
+    }
+
+    App.state.skinLab.goals = derived.goals;
+  }
+
+  renderSkinLabGoals();
 }
 
 function resetPatientForm() {
@@ -438,6 +515,10 @@ function showStep(stepId) {
 
   if (stepId === 'assessment') {
     renderAssessmentQuestions();
+  }
+
+  if (stepId === 'skinLab') {
+    renderSkinLabGoals();
   }
 
   if (stepId === 'history') {
@@ -618,6 +699,93 @@ function updateAssessmentProgress() {
   if (progressBar) {
     progressBar.style.width = `${percent}%`;
   }
+}
+
+function renderSkinLabGoals() {
+  const container = document.getElementById('skinLabGoals');
+  if (!container || container.children.length) {
+    updateSkinLabGoalSelection();
+    return;
+  }
+
+  SKIN_LAB_GOALS.forEach((goal) => {
+    const label = SKIN_LAB_GOAL_META[goal] || goal;
+    const option = document.createElement('div');
+    option.className = 'skin-lab-option';
+    option.dataset.goal = goal;
+    option.setAttribute('role', 'checkbox');
+    option.setAttribute('tabindex', '0');
+    option.setAttribute('aria-checked', 'false');
+    option.innerHTML = `
+      <span class="skin-lab-option-body">
+        <span class="skin-lab-option-label">${label}</span>
+      </span>
+      <span class="skin-lab-check" aria-hidden="true"></span>
+    `;
+
+    option.addEventListener('click', () => toggleSkinLabGoal(goal));
+    option.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        toggleSkinLabGoal(goal);
+      }
+    });
+    container.appendChild(option);
+  });
+
+  updateSkinLabGoalSelection();
+}
+
+function toggleSkinLabGoal(goal) {
+  const selected = App.state.skinLab.goals;
+  if (selected.includes(goal)) {
+    App.state.skinLab.goals = selected.filter((item) => item !== goal);
+  } else {
+    App.state.skinLab.goals = [...selected, goal];
+  }
+
+  updateSkinLabGoalSelection();
+}
+
+function updateSkinLabGoalSelection() {
+  const selected = App.state.skinLab.goals;
+  document.querySelectorAll('.skin-lab-option').forEach((button) => {
+    const isSelected = selected.includes(button.dataset.goal);
+    button.classList.toggle('is-selected', isSelected);
+    button.setAttribute('aria-checked', String(isSelected));
+  });
+}
+
+function deriveSkinLabDataFromAssessment() {
+  const respuestas = App.state.assessment.respuestas || {};
+  const touched = App.state.assessment.touched || {};
+  const touchedCount = Object.values(touched).filter(Boolean).length;
+  const nombre = App.state.assessment.paciente || '';
+
+  if (!touchedCount) {
+    return null;
+  }
+
+  const entries = Object.entries(respuestas).map(([id, value]) => ({ id, score: Number(value) || 0 }));
+  if (!entries.length) {
+    return null;
+  }
+
+  entries.sort((a, b) => a.score - b.score);
+  const goals = [...new Set(entries.slice(0, 3).map(({ id }) => ASSESSMENT_TO_SKINLAB_GOAL_MAP[id]).filter(Boolean))];
+  const topItems = entries.slice(0, 3).map(({ id }) => {
+    const question = ASSESSMENT_QUESTIONS.find((item) => item.id === id);
+    return question ? question.title : id;
+  });
+
+  return {
+    nombre,
+    goals: goals.length ? goals : App.state.skinLab.goals,
+    concern: topItems.length
+      ? `Las principales prioridades identificadas son: ${topItems.join(', ')}.`
+      : 'Se ha detectado prioridad de tratamiento según la evaluación previa.',
+    considerations: 'Generar recomendaciones de Skin Lab en función de la autoevaluación estética y los objetivos declarados.'
+  };
 }
 
 function renderProcedureManager() {
@@ -1236,6 +1404,85 @@ async function createAssessmentPdf() {
   }
 }
 
+async function createSkinLabPdf() {
+  const button = document.getElementById('btnGenerateSkinLab');
+  const nombreInput = document.getElementById('skinLabNombre');
+  const edadInput = document.getElementById('skinLabEdad');
+  const concernInput = document.getElementById('skinLabConcern');
+  const considerationsInput = document.getElementById('skinLabConsiderations');
+
+  const nombre = nombreInput.value.trim();
+  const edad = edadInput.value.trim();
+  const concern = concernInput.value.trim();
+  const considerations = considerationsInput.value.trim();
+  const goals = [...App.state.skinLab.goals];
+
+  if (!nombre) {
+    showMessage('Datos incompletos', 'Ingrese el nombre de la paciente.', 'Atencion', 'Volver a completar', 'skinLabNombre');
+    return;
+  }
+
+  if (!edad || Number(edad) < 1 || Number(edad) > 120) {
+    showMessage('Datos incompletos', 'Ingrese una edad valida para la paciente.', 'Atencion', 'Volver a completar', 'skinLabEdad');
+    return;
+  }
+
+  const derived = deriveSkinLabDataFromAssessment();
+  const finalGoals = goals.length ? goals : derived?.goals || [];
+  const finalConcern = concern || derived?.concern || '';
+  const finalConsiderations = considerations || derived?.considerations || '';
+
+  if (!finalGoals.length) {
+    showMessage('Datos incompletos', 'Seleccione al menos un objetivo para la piel.', 'Atencion', 'Volver a completar');
+    return;
+  }
+
+  if (!finalConcern) {
+    showMessage('Datos incompletos', 'Complete la preocupacion principal de la piel.', 'Atencion', 'Volver a completar', 'skinLabConcern');
+    return;
+  }
+
+  button.disabled = true;
+  try {
+    const result = await PdfGenerator.generateSkinLabPdf({
+      paciente: { nombre, edad },
+      goals: finalGoals,
+      concern: finalConcern,
+      considerations: finalConsiderations,
+      assessment: App.state.assessment
+    });
+
+    await downloadBlob(new Blob([result.pdfBytes], { type: 'application/pdf' }), result.fileName);
+
+    try {
+      await ConsentStorage.saveConsent({
+        nombre,
+        edad,
+        rut: '',
+        fecha: formatDate(new Date()),
+        tipo: 'SKIN LAB',
+        tratamiento: 'Skin Lab - Objetivos del Tratamiento',
+        autorizacion: '',
+        archivo: result.fileName,
+        pdfBytes: result.pdfBytes
+      });
+      await refreshHistory();
+    } catch (storageError) {
+      console.error('Error guardando historial:', storageError);
+      showMessage('PDF generado', 'La evaluacion Skin Lab se descargo correctamente, pero no se pudo guardar en el historial de este dispositivo.');
+    }
+
+    setDoneMessage('¡Gracias por completar tu evaluación!', 'Hemos registrado tus objetivos y preferencias. Esta información nos ayudará a personalizar tu tratamiento Skin Lab.', 'assessment');
+    showStep('done');
+    resetSkinLabFlow();
+  } catch (error) {
+    console.error(error);
+    showMessage('No se pudo generar el PDF', error?.message || 'Revise las respuestas e intente nuevamente.');
+  } finally {
+    button.disabled = false;
+  }
+}
+
 function setDoneMessage(title, message, mode = 'consent') {
   document.querySelector('#stepDone h2').textContent = title;
   document.querySelector('#stepDone > .card > p').textContent = message;
@@ -1275,7 +1522,27 @@ function blobToBase64(blob) {
 
 async function refreshHistory() {
   App.historyRecords = await ConsentStorage.getAllConsents();
+  updateHistoryViewLabels();
   renderHistoryList(getFilteredHistoryRecords());
+}
+
+function updateHistoryViewLabels() {
+  const isSkinLab = App.state.historyArea === 'skinLab';
+  const title = document.getElementById('historyTitle');
+  const search = document.getElementById('historySearch');
+  const exportBackupButton = document.getElementById('btnExportBackup');
+
+  if (title) {
+    title.textContent = isSkinLab ? 'SKIN LAB' : 'Documentacion Clinica';
+  }
+
+  if (search) {
+    search.placeholder = isSkinLab ? 'Buscar paciente' : 'Buscar paciente, procedimiento o RUT';
+  }
+
+  if (exportBackupButton) {
+    exportBackupButton.textContent = isSkinLab ? 'Exportar Skin Lab completo' : 'Exportar historial completo';
+  }
 }
 
 function renderHistoryList(records) {
@@ -1287,7 +1554,9 @@ function renderHistoryList(records) {
   }
 
   if (!records.length) {
-    list.innerHTML = '<p>No hay registros en el historial.</p>';
+    list.innerHTML = App.state.historyArea === 'skinLab'
+      ? '<p>No hay documentos Skin Lab guardados.</p>'
+      : '<p>No hay registros en el historial.</p>';
     return;
   }
 
@@ -1300,10 +1569,12 @@ function renderHistoryList(records) {
     const card = document.createElement('article');
     card.className = 'history-card';
     const documentKind = record.tipo === 'AUTOEVALUACION' ? 'Autoevaluaci&oacute;n est&eacute;tica' : 'Consentimiento';
-    if (record.tipo === 'AUTOEVALUACION') {
+    if (record.tipo === 'AUTOEVALUACION' || record.tipo === 'SKIN LAB') {
+      const title = record.tipo === 'SKIN LAB' ? 'Skin Lab &bull; OBJETIVOS DEL TRATAMIENTO' : 'Autoevaluaci&oacute;n &bull; EST&Eacute;TICA';
       card.innerHTML = `
         <h3>${record.nombre}</h3>
-        <p class="history-consent">Autoevaluaci&oacute;n &bull; EST&Eacute;TICA</p>
+        <p class="history-consent">${title}</p>
+        ${record.edad ? `<p><strong>Edad</strong> ${record.edad}</p>` : ''}
         <p><strong>Fecha de emisi&oacute;n</strong> ${formatHistoryDisplayDate(record)}</p>
         <div class="history-actions"></div>
       `;
@@ -1392,15 +1663,26 @@ function renderHistoryPagination(totalRecords, totalPages) {
 
 function getFilteredHistoryRecords() {
   const query = document.getElementById('historySearch').value.trim().toLowerCase();
-  const selectedMonth = document.getElementById('historyMonth').value;
-  return App.historyRecords.filter((record) => {
-    const matchesSearch = [record.nombre, record.rut, record.fecha, record.tipo, record.tratamiento]
+  return getHistoryAreaRecords().filter((record) => {
+    if (!query) {
+      return true;
+    }
+    if (App.state.historyArea === 'skinLab') {
+      return String(record.nombre || '').toLowerCase().includes(query);
+    }
+    return [record.nombre, record.rut, record.fecha, record.tipo, record.tratamiento]
       .join(' ')
       .toLowerCase()
       .includes(query);
-    const matchesMonth = !selectedMonth || getRecordMonthKey(record) === selectedMonth;
-    return matchesSearch && matchesMonth;
   });
+}
+
+function getHistoryAreaRecords(records = App.historyRecords) {
+  if (App.state.historyArea === 'skinLab') {
+    return records.filter((record) => record.tipo === 'SKIN LAB');
+  }
+
+  return records.filter((record) => record.tipo !== 'SKIN LAB');
 }
 
 async function openDocumentPreview(record) {
@@ -1486,8 +1768,9 @@ function normalizePdfBytes(pdfBytes) {
 }
 
 async function exportBackup() {
-  const records = await ConsentStorage.getAllConsents();
-  await exportRecords(records, `consentimientos_completo_${formatDateForFile(new Date())}.zip`, 'consentimientos_completo');
+  const records = getHistoryAreaRecords(await ConsentStorage.getAllConsents());
+  const prefix = App.state.historyArea === 'skinLab' ? 'skin_lab' : 'consentimientos';
+  await exportRecords(records, `${prefix}_completo_${formatDateForFile(new Date())}.zip`, `${prefix}_completo`);
 }
 
 async function exportMonthBackup() {
@@ -1504,7 +1787,8 @@ async function exportMonthBackup() {
   }
 
   const monthKey = month.replace('-', '');
-  await exportRecords(records, `consentimientos_${monthKey}.zip`, `consentimientos_${monthKey}`);
+  const prefix = App.state.historyArea === 'skinLab' ? 'skin_lab' : 'consentimientos';
+  await exportRecords(records, `${prefix}_${monthKey}.zip`, `${prefix}_${monthKey}`);
 }
 
 async function exportRecords(records, fileName, folderName) {
@@ -1561,7 +1845,7 @@ function getRecordsForSelectedMonth() {
     return [];
   }
 
-  return App.historyRecords.filter((record) => getRecordMonthKey(record) === month);
+  return getHistoryAreaRecords().filter((record) => getRecordMonthKey(record) === month);
 }
 
 function getRecordMonthKey(record) {
