@@ -203,7 +203,8 @@ header p {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -316,6 +317,10 @@ button:disabled {
   min-height: 64px;
 }
 
+.menu-options .menu-wide {
+  flex-basis: 100%;
+}
+
 .pdf-viewer {
   overflow: hidden;
   margin: 18px 0;
@@ -383,6 +388,108 @@ form {
 
 .assessment-form {
   grid-template-columns: 1fr;
+}
+
+.skin-lab-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.skin-lab-fieldset {
+  padding: clamp(18px, 2.5vw, 24px);
+  background: rgba(255, 253, 248, 0.68);
+}
+
+.skin-lab-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.skin-lab-option {
+  position: relative;
+  min-height: 72px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 22px;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid rgba(217, 205, 188, 0.9);
+  border-radius: var(--radius);
+  background: rgba(255, 253, 248, 0.96);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.skin-lab-option:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(111, 86, 62, 0.5);
+  background: #fffdf8;
+  color: var(--ink);
+  box-shadow: 0 14px 30px rgba(58, 45, 33, 0.08);
+}
+
+.skin-lab-option:focus-visible {
+  outline: 2px solid rgba(111, 86, 62, 0.38);
+  outline-offset: 3px;
+}
+
+.skin-lab-option.is-selected {
+  border-color: var(--taupe);
+  background: var(--soft);
+  color: var(--ink);
+  box-shadow: 0 14px 30px rgba(111, 86, 62, 0.12);
+}
+
+.skin-lab-option.is-selected:hover:not(:disabled) {
+  border-color: var(--taupe);
+  background: var(--soft);
+  color: var(--ink);
+}
+
+.skin-lab-option-body {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.skin-lab-option-label {
+  display: block;
+  color: inherit;
+  font-size: 0.95rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.skin-lab-check {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(111, 86, 62, 0.28);
+  border-radius: 50%;
+  background: #fffdf8;
+  transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
+}
+
+.skin-lab-option.is-selected .skin-lab-check {
+  border-color: var(--earth);
+  background: var(--earth);
+  box-shadow: inset 0 0 0 5px #fffdf8;
+}
+
+.skin-lab-textarea-label {
+  display: grid;
+  gap: 7px;
+}
+
+.field-help {
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 600;
+  line-height: 1.45;
 }
 
 .assessment-progress {
@@ -544,6 +651,7 @@ fieldset {
 
 form input,
 form select,
+form textarea,
 #inputNewProcedure,
 .procedure-item input[type="text"],
 #historySearch,
@@ -561,6 +669,7 @@ form select,
 
 form input:not([type="radio"]):not([type="checkbox"]):focus,
 form select:focus,
+form textarea:focus,
 #inputNewProcedure:focus,
 .procedure-item input[type="text"]:focus,
 #historySearch:focus,
@@ -568,6 +677,12 @@ form select:focus,
   border-color: var(--taupe);
   background: #ffffff;
   box-shadow: 0 0 0 4px rgba(154, 127, 99, 0.14);
+}
+
+form textarea {
+  min-height: 132px;
+  resize: vertical;
+  line-height: 1.55;
 }
 
 form input[type="radio"]:focus,
@@ -845,7 +960,7 @@ fieldset label {
 
 .history-controls {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(360px, 1fr);
+  grid-template-columns: 1fr;
   gap: 14px;
   margin: 22px 0 24px;
 }
@@ -1174,6 +1289,10 @@ fieldset label {
   .history-search-block {
     min-height: auto;
   }
+
+  .skin-lab-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 760px) {
@@ -1193,6 +1312,14 @@ fieldset label {
   }
 
   form {
+    grid-template-columns: 1fr;
+  }
+
+  .skin-lab-form {
+    grid-template-columns: 1fr;
+  }
+
+  .skin-lab-options {
     grid-template-columns: 1fr;
   }
 
@@ -1306,6 +1433,7 @@ fieldset label {
 
   form input,
   form select,
+  form textarea,
   #inputNewProcedure,
   .procedure-item input[type="text"],
   #historySearch,
