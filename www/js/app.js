@@ -18,17 +18,28 @@ const App = {
     historyAccessGranted: false,
     protectedTarget: 'menu',
     historyPage: 1,
-    historyArea: 'clinical'
+    historyArea: 'clinical',
+    recaptureMonth: '',
+    recapturePage: 1
   },
   signaturePad: null,
   historyRecords: [],
+  recaptureRecords: [],
+  recaptureStats: {},
   procedures: [],
   pdfRenderToken: 0,
   previewRecord: null,
-  pendingFocusTarget: null
+  pendingFocusTarget: null,
+  pendingConfirmAction: null
 };
 const HISTORY_PIN = '0000';
 const PROCEDURES_STORAGE_KEY = 'iconicProcedimientos';
+const RECAPTURE_STORAGE_KEY = 'iconicRecaptacion';
+const RECAPTURE_STATS_STORAGE_KEY = 'iconicRecaptacionStats';
+const RECAPTURE_STATUS = {
+  pending: 'Pendiente',
+  contacted: 'Contactada'
+};
 const DEFAULT_PROCEDURES = [
   'Toxina Botulínica',
   'Ácido hialurónico',
@@ -40,6 +51,7 @@ const DEFAULT_PROCEDURES = [
   'Hialuronidasa y Colagenasa'
 ];
 const HISTORY_PAGE_SIZE = 6;
+const RECAPTURE_PAGE_SIZE = 6;
 const DEFAULT_CONFIG = {
   doctora: 'Patricia Navarrete',
   general: DEFAULT_PROCEDURES,
@@ -151,6 +163,9 @@ async function initApp() {
   setBirthDateLimit();
   App.config = await loadConfig();
   App.procedures = loadStoredProcedures(App.config.general);
+  App.recaptureRecords = loadRecaptureRecords();
+  App.recaptureStats = loadRecaptureStats();
+  App.state.recaptureMonth = getMonthKey(new Date());
   bindEvents();
   showStep('select');
   await refreshHistory();
@@ -224,6 +239,73 @@ function normalizeProcedureName(name) {
   return name.trim().toLowerCase();
 }
 
+function loadRecaptureRecords() {
+  try {
+    const records = JSON.parse(localStorage.getItem(RECAPTURE_STORAGE_KEY) || '[]');
+    if (!Array.isArray(records)) {
+      return [];
+    }
+
+    return records
+      .filter((record) => record && record.id && record.status !== 'scheduled')
+      .map((record) => ({
+        id: record.id,
+        nombre: record.nombre || '',
+        rut: record.rut || '',
+        procedimiento: record.procedimiento || '',
+        consentDate: record.consentDate || '',
+        contactFrom: record.contactFrom || '',
+        status: record.status === 'contacted' ? 'contacted' : 'pending',
+        contactedAt: record.contactedAt || '',
+        contactedMonth: record.contactedMonth || (record.status === 'contacted' ? getMonthKey(record.contactFrom || '') : ''),
+        createdAt: record.createdAt || new Date().toISOString()
+      }))
+      .sort((a, b) => a.contactFrom.localeCompare(b.contactFrom) || a.createdAt.localeCompare(b.createdAt));
+  } catch (error) {
+    console.error('Error cargando recaptacion:', error);
+    return [];
+  }
+}
+
+function saveRecaptureRecords() {
+  localStorage.setItem(RECAPTURE_STORAGE_KEY, JSON.stringify(App.recaptureRecords));
+}
+
+function loadRecaptureStats() {
+  try {
+    const stats = JSON.parse(localStorage.getItem(RECAPTURE_STATS_STORAGE_KEY) || '{}');
+    if (!stats || typeof stats !== 'object') {
+      return { totalScheduled: 0 };
+    }
+
+    const totalScheduled = Number.isFinite(Number(stats.totalScheduled))
+      ? Number(stats.totalScheduled)
+      : getStoredScheduledTotal(stats);
+
+    return {
+      ...stats,
+      totalScheduled
+    };
+  } catch (error) {
+    console.error('Error cargando estadisticas de recaptacion:', error);
+    return { totalScheduled: 0 };
+  }
+}
+
+function saveRecaptureStats() {
+  localStorage.setItem(RECAPTURE_STATS_STORAGE_KEY, JSON.stringify(App.recaptureStats));
+}
+
+function getStoredScheduledTotal(stats) {
+  return Object.values(stats || {}).reduce((total, value) => {
+    if (!value || typeof value !== 'object') {
+      return total;
+    }
+
+    return total + Number(value.scheduled || 0);
+  }, 0);
+}
+
 function getEnabledProcedures() {
   return App.procedures.filter((procedure) => procedure.enabled).map((procedure) => procedure.name);
 }
@@ -267,9 +349,11 @@ function bindEvents() {
   document.getElementById('btnShowHistory').addEventListener('click', requestHistoryAccess);
   document.getElementById('btnMenuHistory').addEventListener('click', () => openHistoryArea('clinical'));
   document.getElementById('btnMenuProcedures').addEventListener('click', () => openProtectedStep('procedures'));
+  document.getElementById('btnMenuRecapture').addEventListener('click', () => openProtectedStep('recapture'));
   document.getElementById('btnMenuSkinLab').addEventListener('click', () => openHistoryArea('skinLab'));
   document.getElementById('btnMenuBack').addEventListener('click', () => showStep('select'));
   document.getElementById('btnProceduresBack').addEventListener('click', () => openProtectedStep('menu'));
+  document.getElementById('btnRecaptureBack').addEventListener('click', () => openProtectedStep('menu'));
   document.getElementById('btnAddProcedure').addEventListener('click', addProcedure);
   document.getElementById('inputNewProcedure').addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
@@ -282,6 +366,19 @@ function bindEvents() {
     refreshHistory();
   });
   document.getElementById('btnExportBackup').addEventListener('click', exportBackup);
+  document.getElementById('btnExportMonth').addEventListener('click', exportMonthBackup);
+  document.getElementById('btnDeleteMonth').addEventListener('click', deleteMonthRecords);
+  document.getElementById('recaptureMonth').addEventListener('change', () => {
+    App.state.recaptureMonth = document.getElementById('recaptureMonth').value || getMonthKey(new Date());
+    App.state.recapturePage = 1;
+    renderRecaptureView();
+  });
+  document.getElementById('btnRecapturePrevMonth').addEventListener('click', () => changeRecaptureMonth(-1));
+  document.getElementById('btnRecaptureNextMonth').addEventListener('click', () => changeRecaptureMonth(1));
+  document.getElementById('recaptureSearch').addEventListener('input', () => {
+    App.state.recapturePage = 1;
+    renderRecaptureView();
+  });
   document.getElementById('btnPinCancel').addEventListener('click', closePinModal);
   document.getElementById('btnPinSubmit').addEventListener('click', submitHistoryPin);
   document.getElementById('pinInput').addEventListener('input', onPinInput);
@@ -291,6 +388,8 @@ function bindEvents() {
     }
   });
   document.getElementById('btnMessageOk').addEventListener('click', closeMessageModal);
+  document.getElementById('btnConfirmCancel').addEventListener('click', closeConfirmModal);
+  document.getElementById('btnConfirmOk').addEventListener('click', confirmModalAction);
   document.getElementById('btnCloseDocumentPreview').addEventListener('click', closeDocumentPreview);
   document.getElementById('btnDownloadPreviewDocument').addEventListener('click', downloadPreviewDocument);
 }
@@ -443,6 +542,7 @@ async function renderPdfPreview(asset) {
   const viewer = document.getElementById('pdfRenderViewer');
   const renderToken = App.pdfRenderToken + 1;
   App.pdfRenderToken = renderToken;
+  await waitForNextFrame();
   await renderPdfIntoViewer(asset, viewer, {
     loadingText: 'Cargando PDF original...',
     errorText: 'No se pudo visualizar el PDF original. Vuelva atras e intente nuevamente.',
@@ -458,8 +558,7 @@ async function renderPdfIntoViewer(source, viewer, options = {}) {
       throw new Error('No se pudo cargar el visor PDF.');
     }
 
-    const loadingTask = window.pdfjsLib.getDocument(source);
-    const pdf = await loadingTask.promise;
+    const pdf = await loadPdfDocument(source);
 
     if (options.shouldContinue && !options.shouldContinue()) {
       return;
@@ -490,8 +589,86 @@ async function renderPdfIntoViewer(source, viewer, options = {}) {
     }
   } catch (error) {
     console.error('Error renderizando PDF:', error);
+    if (typeof source === 'string') {
+      renderNativePdfFallback(viewer, source, options.errorText);
+      return;
+    }
+
     viewer.innerHTML = `<p class="pdf-render-status">${options.errorText || 'No se pudo visualizar el PDF.'}</p>`;
   }
+}
+
+async function loadPdfDocument(source) {
+  if (typeof source === 'string') {
+    try {
+      const data = await loadPdfBytes(source);
+      return await window.pdfjsLib.getDocument({ data }).promise;
+    } catch (bytesError) {
+      console.warn('No se pudo cargar PDF como bytes, intentando por URL:', bytesError);
+    }
+  }
+
+  try {
+    return await window.pdfjsLib.getDocument(normalizePdfSource(source)).promise;
+  } catch (error) {
+    throw error;
+  }
+}
+
+function loadPdfBytes(url) {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open('GET', url, true);
+    request.responseType = 'arraybuffer';
+    request.onload = () => {
+      if (request.status && (request.status < 200 || request.status >= 300)) {
+        reject(new Error(`No se pudo cargar ${url}`));
+        return;
+      }
+
+      resolve(new Uint8Array(request.response));
+    };
+    request.onerror = () => reject(new Error(`No se pudo cargar ${url}`));
+    request.send();
+  });
+}
+
+function renderNativePdfFallback(viewer, source, message) {
+  viewer.innerHTML = '';
+
+  const object = document.createElement('object');
+  object.className = 'pdf-native-viewer';
+  object.type = 'application/pdf';
+  object.data = source;
+
+  const fallback = document.createElement('p');
+  fallback.className = 'pdf-render-status';
+  fallback.textContent = message || 'No se pudo visualizar el PDF con el visor interno.';
+
+  object.appendChild(fallback);
+  viewer.appendChild(object);
+}
+
+function normalizePdfSource(source) {
+  if (typeof source === 'string') {
+    return {
+      url: source,
+      disableWorker: true
+    };
+  }
+
+  if (source && typeof source === 'object') {
+    return {
+      ...source,
+      disableWorker: true
+    };
+  }
+
+  return source;
+}
+
+function waitForNextFrame() {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
 }
 
 function updateReadContinue() {
@@ -529,13 +706,17 @@ function showStep(stepId) {
     renderProcedureManager();
   }
 
+  if (stepId === 'recapture') {
+    renderRecaptureView();
+  }
+
   if (stepId === 'signature') {
     setTimeout(() => App.signaturePad.resize(), 0);
   }
 }
 
 function isProtectedStep(stepId) {
-  return ['menu', 'history', 'procedures'].includes(stepId);
+  return ['menu', 'history', 'procedures', 'recapture'].includes(stepId);
 }
 
 function capitalize(value) {
@@ -1158,6 +1339,32 @@ function closeMessageModal() {
   focusPendingTarget();
 }
 
+function showConfirmModal({ title, message, eyebrow = 'Confirmacion', cancelLabel = 'Cancelar', confirmLabel = 'Confirmar', onConfirm }) {
+  App.pendingConfirmAction = typeof onConfirm === 'function' ? onConfirm : null;
+  document.getElementById('confirmModalEyebrow').textContent = eyebrow;
+  document.getElementById('confirmModalTitle').textContent = title;
+  document.getElementById('confirmModalText').textContent = message;
+  document.getElementById('btnConfirmCancel').textContent = cancelLabel;
+  document.getElementById('btnConfirmOk').textContent = confirmLabel;
+  document.getElementById('confirmModal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('btnConfirmCancel').focus(), 0);
+}
+
+function closeConfirmModal() {
+  App.pendingConfirmAction = null;
+  document.getElementById('confirmModal').classList.add('hidden');
+}
+
+function confirmModalAction() {
+  const action = App.pendingConfirmAction;
+  App.pendingConfirmAction = null;
+  document.getElementById('confirmModal').classList.add('hidden');
+
+  if (action) {
+    action();
+  }
+}
+
 function focusPendingTarget() {
   const target = App.pendingFocusTarget;
   App.pendingFocusTarget = null;
@@ -1345,6 +1552,18 @@ async function createConsentPdf() {
       showMessage('PDF generado', 'El consentimiento se descargó correctamente, pero no se pudo guardar en el historial de este dispositivo.');
     }
 
+    try {
+      createRecaptureTasksForConsent({
+        nombre: App.state.paciente.nombre,
+        rut: App.state.paciente.rut,
+        procedimientos: App.state.tratamientos,
+        consentType: App.state.consentType,
+        consentDate: new Date()
+      });
+    } catch (recaptureError) {
+      console.error('Error guardando recaptacion:', recaptureError);
+    }
+
     setDoneMessage('Consentimiento generado', 'El consentimiento se generó correctamente y se guardó en el historial.');
     showStep('done');
     resetConsentFlow();
@@ -1520,6 +1739,427 @@ function blobToBase64(blob) {
   });
 }
 
+function createRecaptureTasksForConsent({ nombre, rut, procedimientos, consentType, consentDate }) {
+  const selectedProcedures = Array.isArray(procedimientos) ? procedimientos : [];
+  const recapturableProcedures = selectedProcedures.filter((procedure) => !isExcludedRecaptureProcedure(procedure));
+  if (!recapturableProcedures.length) {
+    return;
+  }
+
+  if (consentType === 'toxina') {
+    const toxinProcedures = recapturableProcedures.filter(isToxinProcedure);
+    const annualProcedures = recapturableProcedures.filter((procedure) => !isToxinProcedure(procedure));
+
+    if (toxinProcedures.length) {
+      createRecaptureTask({
+        nombre,
+        rut,
+        procedimiento: toxinProcedures.join(', '),
+        consentType,
+        consentDate
+      });
+    }
+
+    if (annualProcedures.length) {
+      createRecaptureTask({
+        nombre,
+        rut,
+        procedimiento: annualProcedures.join(', '),
+        consentType: null,
+        consentDate
+      });
+    }
+
+    return;
+  }
+
+  createRecaptureTask({
+    nombre,
+    rut,
+    procedimiento: recapturableProcedures.join(', '),
+    consentType,
+    consentDate
+  });
+}
+
+function createRecaptureTask({ nombre, rut, procedimiento, consentType, consentDate }) {
+  const treatmentDate = consentDate instanceof Date ? consentDate : new Date();
+  const monthsToContact = getRecaptureDelayMonths(procedimiento, consentType);
+  const contactDate = addMonths(treatmentDate, monthsToContact);
+  const id = globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `recapture-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+  App.recaptureRecords.push({
+    id,
+    nombre: nombre || '',
+    rut: rut || '',
+    procedimiento: procedimiento || 'Procedimiento',
+    consentDate: toDateInputValue(treatmentDate),
+    contactFrom: toDateInputValue(contactDate),
+    status: 'pending',
+    contactedAt: '',
+    contactedMonth: '',
+    createdAt: new Date().toISOString()
+  });
+  App.recaptureRecords.sort((a, b) => a.contactFrom.localeCompare(b.contactFrom) || a.createdAt.localeCompare(b.createdAt));
+  saveRecaptureRecords();
+}
+
+function getRecaptureDelayMonths(procedimiento, consentType) {
+  const normalized = removeAccents(`${procedimiento || ''} ${consentType || ''}`).toLowerCase();
+  return isToxinProcedure(normalized) ? 5 : 12;
+}
+
+function isToxinProcedure(value) {
+  const normalized = removeAccents(value || '').toLowerCase();
+  return normalized.includes('toxina') || normalized.includes('botulinica');
+}
+
+function isExcludedRecaptureProcedure(value) {
+  const normalized = removeAccents(value || '').toLowerCase();
+  return normalized.includes('hialuronidasa') || normalized.includes('colagenasa');
+}
+
+function renderRecaptureView() {
+  App.recaptureRecords = loadRecaptureRecords();
+  const monthInput = document.getElementById('recaptureMonth');
+
+  if (!App.state.recaptureMonth) {
+    App.state.recaptureMonth = getMonthKey(new Date());
+  }
+
+  if (monthInput) {
+    monthInput.value = App.state.recaptureMonth;
+  }
+
+  updateRecaptureCounters();
+  renderRecaptureList(getFilteredRecaptureRecords());
+}
+
+function updateRecaptureCounters() {
+  const month = App.state.recaptureMonth || getMonthKey(new Date());
+  const monthRecords = App.recaptureRecords.filter((record) => getMonthKey(record.contactFrom) === month);
+  const pending = monthRecords.filter((record) => record.status === 'pending').length;
+  const contacted = monthRecords.filter((record) => record.status === 'contacted').length;
+  const scheduled = Number(App.recaptureStats.totalScheduled || 0);
+
+  document.getElementById('recapturePendingCount').textContent = String(pending);
+  document.getElementById('recaptureContactedCount').textContent = String(contacted);
+  document.getElementById('recaptureScheduledCount').textContent = String(scheduled);
+}
+
+function getFilteredRecaptureRecords() {
+  const month = App.state.recaptureMonth || getMonthKey(new Date());
+  const query = removeAccents(document.getElementById('recaptureSearch').value.trim()).toLowerCase();
+
+  return App.recaptureRecords.filter((record) => {
+    const recordMonth = getMonthKey(record.contactFrom);
+    const matchesMonth = recordMonth === month;
+    const haystack = removeAccents([record.nombre, record.rut].join(' ')).toLowerCase();
+    const matchesQuery = !query || haystack.includes(query);
+    return matchesMonth && matchesQuery;
+  });
+}
+
+function renderRecaptureList(records) {
+  const list = document.getElementById('recaptureList');
+  const pagination = document.getElementById('recapturePagination');
+  list.innerHTML = '';
+  if (pagination) {
+    pagination.innerHTML = '';
+  }
+
+  if (!records.length) {
+    list.innerHTML = '<p class="empty-state">No hay pacientes que requieran seguimiento activo para los filtros seleccionados.</p>';
+    return;
+  }
+
+  const totalPages = Math.ceil(records.length / RECAPTURE_PAGE_SIZE);
+  App.state.recapturePage = Math.min(Math.max(App.state.recapturePage, 1), totalPages);
+  const startIndex = (App.state.recapturePage - 1) * RECAPTURE_PAGE_SIZE;
+  const visibleRecords = records.slice(startIndex, startIndex + RECAPTURE_PAGE_SIZE);
+
+  visibleRecords.forEach((record) => {
+    const taskKey = getRecaptureTaskKey(record);
+    const row = document.createElement('article');
+    row.className = `recapture-row recapture-row-${record.status}`;
+
+    const patient = document.createElement('div');
+    patient.className = 'recapture-patient';
+
+    const avatar = document.createElement('span');
+    avatar.className = 'recapture-avatar';
+    avatar.textContent = getInitials(record.nombre);
+
+    const patientCopy = document.createElement('div');
+    patientCopy.className = 'recapture-patient-copy';
+
+    const title = document.createElement('h3');
+    title.textContent = record.nombre || 'Paciente sin nombre';
+
+    const rut = document.createElement('p');
+    rut.textContent = `RUT: ${record.rut || 'Sin RUT'}`;
+
+    patientCopy.append(title, rut);
+    patient.append(avatar, patientCopy);
+
+    const procedure = createRecaptureField('Procedimiento', record.procedimiento || 'Procedimiento', false, 'procedure');
+    const treatmentDate = createRecaptureField('Fecha procedimiento', formatDateForDisplay(record.consentDate), true, 'treatment-date');
+    const contactDate = createRecaptureField('Contactar desde', formatDateForDisplay(record.contactFrom), true, 'contact-date');
+
+    const status = document.createElement('span');
+    status.className = `recapture-status recapture-status-${record.status}`;
+    status.textContent = RECAPTURE_STATUS[record.status] || 'Pendiente';
+
+    const actions = document.createElement('div');
+    actions.className = 'recapture-actions';
+
+    const contactedButton = document.createElement('button');
+    contactedButton.type = 'button';
+    contactedButton.className = 'secondary recapture-action-button recapture-contact-button';
+    contactedButton.textContent = 'Contactada';
+    contactedButton.setAttribute('aria-pressed', record.status === 'contacted' ? 'true' : 'false');
+    contactedButton.addEventListener('click', () => {
+      updateRecaptureStatus(taskKey, record.status === 'contacted' ? 'pending' : 'contacted');
+    });
+
+    const scheduledButton = document.createElement('button');
+    scheduledButton.type = 'button';
+    scheduledButton.className = 'recapture-action-button recapture-scheduled-button';
+    scheduledButton.textContent = 'Agendó cita';
+    scheduledButton.addEventListener('click', () => confirmCompleteRecaptureTask(taskKey));
+
+    const deleteButton = document.createElement('button');
+    deleteButton.type = 'button';
+    deleteButton.className = 'recapture-delete-button';
+    deleteButton.innerHTML = `
+      <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+        <path d="M3 6h18"></path>
+        <path d="M8 6V4h8v2"></path>
+        <path d="M19 6l-1 14H6L5 6"></path>
+        <path d="M10 11v5"></path>
+        <path d="M14 11v5"></path>
+      </svg>
+    `;
+    deleteButton.setAttribute('aria-label', `Eliminar seguimiento de ${record.nombre || 'paciente'}`);
+    deleteButton.title = 'Eliminar de la lista';
+    deleteButton.addEventListener('click', () => confirmDeleteRecaptureTask(taskKey));
+
+    actions.append(contactedButton, scheduledButton, deleteButton);
+    row.append(patient, procedure, treatmentDate, contactDate, status, actions);
+    list.appendChild(row);
+  });
+
+  renderRecapturePagination(records.length, totalPages);
+}
+
+function renderRecapturePagination(totalRecords, totalPages) {
+  const pagination = document.getElementById('recapturePagination');
+  if (!pagination || totalPages <= 1) {
+    return;
+  }
+
+  const page = App.state.recapturePage;
+  const startRecord = (page - 1) * RECAPTURE_PAGE_SIZE + 1;
+  const endRecord = Math.min(page * RECAPTURE_PAGE_SIZE, totalRecords);
+
+  const summary = document.createElement('div');
+  summary.className = 'history-pagination-summary';
+  summary.innerHTML = `
+    <p><strong>${endRecord - startRecord + 1}</strong> pacientes visibles &middot; <strong>${totalRecords}</strong> en total</p>
+  `;
+
+  const controls = document.createElement('div');
+  controls.className = 'history-pagination-controls';
+
+  const previousButton = document.createElement('button');
+  previousButton.type = 'button';
+  previousButton.className = 'secondary history-page-button';
+  previousButton.innerHTML = '<span class="history-page-arrow history-page-arrow-prev" aria-hidden="true"></span>';
+  previousButton.setAttribute('aria-label', 'Pagina anterior');
+  previousButton.disabled = page === 1;
+  previousButton.addEventListener('click', () => {
+    App.state.recapturePage -= 1;
+    renderRecaptureList(getFilteredRecaptureRecords());
+  });
+
+  const pageLabel = document.createElement('span');
+  pageLabel.className = 'history-page-indicator';
+  pageLabel.textContent = `${page} / ${totalPages}`;
+
+  const nextButton = document.createElement('button');
+  nextButton.type = 'button';
+  nextButton.className = 'secondary history-page-button';
+  nextButton.innerHTML = '<span class="history-page-arrow history-page-arrow-next" aria-hidden="true"></span>';
+  nextButton.setAttribute('aria-label', 'Pagina siguiente');
+  nextButton.disabled = page === totalPages;
+  nextButton.addEventListener('click', () => {
+    App.state.recapturePage += 1;
+    renderRecaptureList(getFilteredRecaptureRecords());
+  });
+
+  controls.append(previousButton, pageLabel, nextButton);
+  pagination.append(summary, controls);
+}
+
+function createRecaptureField(label, value, withIcon = false, variant = '') {
+  const item = document.createElement('div');
+  item.className = [
+    'recapture-field',
+    withIcon ? 'recapture-field-date' : '',
+    variant ? `recapture-field-${variant}` : ''
+  ].filter(Boolean).join(' ');
+  const labelElement = document.createElement('span');
+  const valueElement = document.createElement('strong');
+  labelElement.textContent = label;
+  valueElement.textContent = value || '-';
+  item.append(labelElement, valueElement);
+  return item;
+}
+
+function getInitials(name) {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) {
+    return '--';
+  }
+
+  return parts.slice(0, 2).map((part) => part.charAt(0).toUpperCase()).join('');
+}
+
+function getRecaptureTaskKey(record) {
+  return [
+    record.id || '',
+    record.contactFrom || '',
+    normalizeRecaptureIdentity(record.procedimiento)
+  ].join('|');
+}
+
+function normalizeRecaptureIdentity(value) {
+  return removeAccents(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function findRecaptureRecordByTaskKey(taskKey) {
+  return App.recaptureRecords.find((item) => getRecaptureTaskKey(item) === taskKey);
+}
+
+function updateRecaptureStatus(taskKey, status) {
+  const record = findRecaptureRecordByTaskKey(taskKey);
+  if (!record) {
+    return;
+  }
+
+  record.status = status;
+  if (status === 'contacted') {
+    record.contactedAt = new Date().toISOString();
+    record.contactedMonth = getMonthKey(record.contactFrom);
+  } else {
+    record.contactedAt = '';
+    record.contactedMonth = '';
+  }
+  saveRecaptureRecords();
+  renderRecaptureView();
+}
+
+function confirmCompleteRecaptureTask(taskKey) {
+  showConfirmModal({
+    eyebrow: 'Recaptacion',
+    title: '¿Finalizar seguimiento?',
+    message: 'Esta tarea desaparecerá de la bandeja de recaptación activa.',
+    cancelLabel: 'Cancelar',
+    confirmLabel: 'Sí, finalizar',
+    onConfirm: () => completeRecaptureTask(taskKey)
+  });
+}
+
+function confirmDeleteRecaptureTask(taskKey) {
+  showConfirmModal({
+    eyebrow: 'Recaptacion',
+    title: '¿Eliminar seguimiento?',
+    message: 'Esta tarea desaparecerá de la bandeja activa y no se registrará como cita agendada.',
+    cancelLabel: 'Cancelar',
+    confirmLabel: 'Sí, eliminar',
+    onConfirm: () => deleteRecaptureTask(taskKey)
+  });
+}
+
+function completeRecaptureTask(taskKey) {
+  const record = findRecaptureRecordByTaskKey(taskKey);
+  if (!record) {
+    return;
+  }
+
+  const month = getMonthKey(record.contactFrom);
+  App.recaptureStats[month] = App.recaptureStats[month] || {};
+  App.recaptureStats[month].scheduled = Number(App.recaptureStats[month].scheduled || 0) + 1;
+  App.recaptureStats.totalScheduled = Number(App.recaptureStats.totalScheduled || 0) + 1;
+  App.recaptureRecords = App.recaptureRecords.filter((item) => getRecaptureTaskKey(item) !== taskKey);
+  saveRecaptureStats();
+  saveRecaptureRecords();
+  renderRecaptureView();
+}
+
+function deleteRecaptureTask(taskKey) {
+  App.recaptureRecords = App.recaptureRecords.filter((item) => getRecaptureTaskKey(item) !== taskKey);
+  saveRecaptureRecords();
+  renderRecaptureView();
+}
+
+function changeRecaptureMonth(direction) {
+  const currentMonth = App.state.recaptureMonth || getMonthKey(new Date());
+  const [year, month] = currentMonth.split('-').map(Number);
+  const date = Number.isFinite(year) && Number.isFinite(month)
+    ? new Date(year, month - 1 + direction, 1)
+    : new Date();
+  App.state.recaptureMonth = getMonthKey(date);
+  App.state.recapturePage = 1;
+  renderRecaptureView();
+}
+
+function addMonths(date, months) {
+  const result = new Date(date.getTime());
+  const day = result.getDate();
+  result.setMonth(result.getMonth() + months);
+  if (result.getDate() !== day) {
+    result.setDate(0);
+  }
+  return result;
+}
+
+function toDateInputValue(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getMonthKey(value) {
+  if (value instanceof Date) {
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}`;
+  }
+
+  return String(value || '').slice(0, 7);
+}
+
+function formatDateForDisplay(value) {
+  if (!value) {
+    return '';
+  }
+
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleDateString('es-CL', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  });
+}
+
+function removeAccents(value) {
+  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
 async function refreshHistory() {
   App.historyRecords = await ConsentStorage.getAllConsents();
   updateHistoryViewLabels();
@@ -1531,6 +2171,7 @@ function updateHistoryViewLabels() {
   const title = document.getElementById('historyTitle');
   const search = document.getElementById('historySearch');
   const exportBackupButton = document.getElementById('btnExportBackup');
+  const monthBlock = document.getElementById('historyMonthBlock');
 
   if (title) {
     title.textContent = isSkinLab ? 'SKIN LAB' : 'Documentacion Clinica';
@@ -1542,6 +2183,12 @@ function updateHistoryViewLabels() {
 
   if (exportBackupButton) {
     exportBackupButton.textContent = isSkinLab ? 'Exportar Skin Lab completo' : 'Exportar historial completo';
+  }
+
+  if (monthBlock) {
+    monthBlock.classList.remove('hidden');
+    monthBlock.hidden = false;
+    monthBlock.setAttribute('aria-hidden', 'false');
   }
 }
 
@@ -1621,13 +2268,13 @@ function renderHistoryPagination(totalRecords, totalPages) {
   }
 
   const page = App.state.historyPage;
+  const startRecord = (page - 1) * HISTORY_PAGE_SIZE + 1;
   const endRecord = Math.min(page * HISTORY_PAGE_SIZE, totalRecords);
 
   const summary = document.createElement('div');
   summary.className = 'history-pagination-summary';
   summary.innerHTML = `
-    <span class="history-pagination-icon" aria-hidden="true"></span>
-    <p>Mostrando <strong>${endRecord} de ${totalRecords}</strong> documentos</p>
+    <p><strong>${endRecord - startRecord + 1}</strong> documentos visibles &middot; <strong>${totalRecords}</strong> en total</p>
   `;
 
   const controls = document.createElement('div');
@@ -1636,7 +2283,8 @@ function renderHistoryPagination(totalRecords, totalPages) {
   const previousButton = document.createElement('button');
   previousButton.type = 'button';
   previousButton.className = 'secondary history-page-button';
-  previousButton.innerHTML = '<span class="history-page-arrow history-page-arrow-prev" aria-hidden="true"></span><span>Anterior</span>';
+  previousButton.innerHTML = '<span class="history-page-arrow history-page-arrow-prev" aria-hidden="true"></span>';
+  previousButton.setAttribute('aria-label', 'Pagina anterior');
   previousButton.disabled = page === 1;
   previousButton.addEventListener('click', () => {
     App.state.historyPage -= 1;
@@ -1650,7 +2298,8 @@ function renderHistoryPagination(totalRecords, totalPages) {
   const nextButton = document.createElement('button');
   nextButton.type = 'button';
   nextButton.className = 'secondary history-page-button';
-  nextButton.innerHTML = '<span>Siguiente</span><span class="history-page-arrow history-page-arrow-next" aria-hidden="true"></span>';
+  nextButton.innerHTML = '<span class="history-page-arrow history-page-arrow-next" aria-hidden="true"></span>';
+  nextButton.setAttribute('aria-label', 'Pagina siguiente');
   nextButton.disabled = page === totalPages;
   nextButton.addEventListener('click', () => {
     App.state.historyPage += 1;

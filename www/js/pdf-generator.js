@@ -31,15 +31,16 @@ const PdfGenerator = (() => {
   const PAGE2 = {
     general: {
       firmaPaciente: { x: 82, y: 296, width: 216, height: 42 },
-      rutPaciente: { x: 120, y: 330 },
-      firmaDra: { x: 322, y: 298, width: 216, height: 40 }
+      rutPaciente: { x: 120, y: 344 },
+      firmaDra: { x: 300, y: 300, width: 250, height: 92 }
     },
     toxina: {
       firmaPaciente: { x: 82, y: 170, width: 216, height: 42 },
-      rutPaciente: { x: 120, y: 198 },
-      firmaDra: { x: 322, y: 172, width: 216, height: 40 }
+      rutPaciente: { x: 120, y: 212 },
+      firmaDra: { x: 300, y: 174, width: 250, height: 92 }
     }
   };
+  const DOCTOR_SIGNATURE_SCALE = 0.82;
   const ASSESSMENT_MARKS = [
     { id: 'piel', page: 0, y: 535.4 },
     { id: 'arrugas', page: 0, y: 436.1 },
@@ -67,7 +68,7 @@ const PdfGenerator = (() => {
   };
 
   async function fetchArrayBuffer(url) {
-    const embeddedAsset = window.PdfEmbeddedAssets && window.PdfEmbeddedAssets[url];
+    const embeddedAsset = getEmbeddedAsset(url);
     if (embeddedAsset) {
       return base64ToArrayBuffer(embeddedAsset);
     }
@@ -82,6 +83,16 @@ const PdfGenerator = (() => {
     }
 
     return await fetchArrayBufferWithXhr(url);
+  }
+
+  function getEmbeddedAsset(url) {
+    const assets = window.PdfEmbeddedAssets;
+    if (!assets) {
+      return null;
+    }
+
+    const normalizedUrl = url.replace(/^\.\//, '');
+    return assets[url] || assets[normalizedUrl] || assets[`./${normalizedUrl}`] || null;
   }
 
   function base64ToArrayBuffer(base64) {
@@ -120,8 +131,30 @@ const PdfGenerator = (() => {
     return bytes;
   }
 
+  function loadImageAsPngBytes(url) {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = image.naturalWidth || image.width;
+          canvas.height = image.naturalHeight || image.height;
+
+          const context = canvas.getContext('2d');
+          context.clearRect(0, 0, canvas.width, canvas.height);
+          context.drawImage(image, 0, 0);
+          resolve(dataUrlToBytes(canvas.toDataURL('image/png')));
+        } catch (error) {
+          reject(error);
+        }
+      };
+      image.onerror = () => reject(new Error(`No se pudo cargar ${url}`));
+      image.src = url;
+    });
+  }
+
   async function embedDoctorSignature(pdfDoc) {
-    const signatureFiles = ['assets/firmaPaty.png'];
+    const signatureFiles = ['assets/firmaPaty.png', './assets/firmaPaty.png'];
     let lastError = null;
 
     for (const file of signatureFiles) {
@@ -131,9 +164,17 @@ const PdfGenerator = (() => {
       } catch (error) {
         lastError = error;
       }
+
+      try {
+        const bytes = await loadImageAsPngBytes(file);
+        return await pdfDoc.embedPng(bytes);
+      } catch (error) {
+        lastError = error;
+      }
     }
 
-    throw lastError || new Error('No se pudo cargar la firma de la Dra. Paty.');
+    console.warn('No se pudo cargar la firma de la Dra. Paty. El PDF se generara sin esa imagen.', lastError);
+    return null;
   }
 
   function drawImageInBox(page, image, box, scaleFactor = 1) {
@@ -265,7 +306,9 @@ const PdfGenerator = (() => {
       const page2Coords = PAGE2[options.consentType] || PAGE2.general;
       page2.drawText(options.paciente.rut, { x: page2Coords.rutPaciente.x, y: page2Coords.rutPaciente.y, size: fontSize, font, maxWidth: 180 });
       const doctorSignatureImage = await embedDoctorSignature(pdfDoc);
-      drawImageInBox(page2, doctorSignatureImage, page2Coords.firmaDra, 1);
+      if (doctorSignatureImage) {
+        drawImageInBox(page2, doctorSignatureImage, page2Coords.firmaDra, DOCTOR_SIGNATURE_SCALE);
+      }
     }
 
     const pdfBytes = await pdfDoc.save();
