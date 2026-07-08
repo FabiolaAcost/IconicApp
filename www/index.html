@@ -24,7 +24,11 @@
     </div>
   </div>
   <div class="header-actions">
-    <button id="btnShowHistory" class="secondary">Panel</button>
+    <button id="btnShowHistory" class="secondary panel-command panel-command-open">
+      <span class="panel-command-icon" aria-hidden="true"></span>
+      <span>Panel</span>
+    </button>
+    <button id="btnHistoryBackTop" class="secondary hidden">Volver</button>
   </div>
 </header>
 <main>
@@ -46,6 +50,14 @@
         <button id="btnToxina">Consentimiento Toxina</button>
       </div>
     </div>
+    <div class="card select-card">
+      <p class="eyebrow">Evaluaci&oacute;n Skin Lab</p>
+      <h2>Dise&ntilde;emos tu Tratamiento</h2>
+      <p class="section-copy">Completa una breve evaluaci&oacute;n para conocer tus objetivos y personalizar tu experiencia Skin Lab.</p>
+      <div class="actions">
+        <button id="btnStartSkinLab">Comenzar</button>
+      </div>
+    </div>
   </section>
   <section class="step hidden" id="stepAssessment">
     <div class="card">
@@ -65,6 +77,39 @@
       <div class="actions">
         <button id="btnAssessmentBack" class="secondary">Volver</button>
         <button id="btnGenerateAssessment">Generar autoevaluaci&oacute;n</button>
+      </div>
+    </div>
+  </section>
+  <section class="step hidden" id="stepSkinLab">
+    <div class="card">
+      <p class="eyebrow">SKIN LAB</p>
+      <h2>Objetivos del Tratamiento</h2>
+      <p class="section-copy">Cada piel tiene objetivos diferentes. Cu&eacute;ntanos qu&eacute; te gustar&iacute;a mejorar para ofrecerte una experiencia personalizada.</p>
+      <form id="skinLabForm" class="skin-lab-form">
+        <label>Nombre completo
+          <input type="text" id="skinLabNombre" required>
+        </label>
+        <label>Edad
+          <input type="text" id="skinLabEdad" inputmode="numeric" pattern="[0-9]*" required>
+        </label>
+        <fieldset class="skin-lab-fieldset form-wide">
+          <legend>&iquest;Qu&eacute; te gustar&iacute;a mejorar de tu piel?</legend>
+          <div id="skinLabGoals" class="skin-lab-options" aria-label="Objetivos de piel"></div>
+        </fieldset>
+        <label class="form-wide skin-lab-textarea-label">
+          <span>&iquest;Qu&eacute; es lo que m&aacute;s te preocupa actualmente de tu piel?</span>
+          <span class="field-help">Ejemplo: manchas posteriores al acn&eacute;, sensaci&oacute;n de sequedad, exceso de brillo o falta de luminosidad.</span>
+          <textarea id="skinLabConcern" rows="5" required></textarea>
+        </label>
+        <label class="form-wide skin-lab-textarea-label">
+          <span>&iquest;Hay algo que te gustar&iacute;a que consider&aacute;ramos durante tu tratamiento?</span>
+          <span class="field-help">Ejemplo: alergias, tratamientos recientes, embarazo, sensibilidad a productos o eventos pr&oacute;ximos.</span>
+          <textarea id="skinLabConsiderations" rows="5"></textarea>
+        </label>
+      </form>
+      <div class="actions">
+        <button id="btnSkinLabBack" class="secondary">Volver</button>
+        <button id="btnGenerateSkinLab">Generar evaluaci&oacute;n</button>
       </div>
     </div>
   </section>
@@ -92,17 +137,19 @@
           <input type="text" id="inputNombre" required>
         </label>
         <label>RUT
-          <input type="text" id="inputRut" placeholder="12345678-9" required>
+          <input type="text" id="inputRut" required>
         </label>
-        <label>Fecha de nacimiento
-          <input type="date" id="inputFechaNacimiento" required>
+        <label class="birthdate-field form-wide">Fecha de nacimiento
+          <input type="text" id="inputFechaNacimiento" inputmode="numeric" autocomplete="bday" maxlength="10" placeholder="DD/MM/AAAA" required>
         </label>
         <label class="form-wide">Direcci&oacute;n
           <input type="text" id="inputDireccion" required>
         </label>
         <div id="treatmentContainer" class="form-wide">
           <label>Tratamiento
-            <select id="selectTratamiento"></select>
+            <span class="select-shell">
+              <select id="selectTratamiento" required></select>
+            </span>
           </label>
           <div id="selectedTreatments" class="selected-treatments" aria-live="polite"></div>
         </div>
@@ -166,11 +213,50 @@
       <h2>Centro de Gesti&oacute;n</h2>
       <p class="section-copy">Gestione consentimientos, procedimientos y documentaci&oacute;n cl&iacute;nica de forma segura.</p>
       <div class="menu-options">
-        <button id="btnMenuHistory">Historial Cl&iacute;nico</button>
-        <button id="btnMenuProcedures" class="secondary">Gesti&oacute;n de Procedimientos</button>
+        <button id="btnMenuHistory" class="menu-card-button menu-card-history">
+          <span class="menu-card-icon" aria-hidden="true"></span>
+          <span class="menu-card-copy">
+            <span class="menu-card-title">Historial Cl&iacute;nico</span>
+            <span class="menu-card-description">Consulte y gestione los consentimientos firmados por sus pacientes.</span>
+          </span>
+          <span class="menu-card-arrow" aria-hidden="true"></span>
+        </button>
+        <button id="btnMenuProcedures" class="menu-card-button menu-card-procedures">
+          <span class="menu-card-icon" aria-hidden="true"></span>
+          <span class="menu-card-copy">
+            <span class="menu-card-title">Gesti&oacute;n de Procedimientos</span>
+            <span class="menu-card-description">Administre los procedimientos disponibles.</span>
+          </span>
+          <span class="menu-card-arrow" aria-hidden="true"></span>
+        </button>
+        <button id="btnMenuRecapture" class="menu-card-button menu-card-recapture" type="button">
+          <span class="menu-card-icon" aria-hidden="true"></span>
+          <span class="menu-card-copy">
+            <span class="menu-card-title">Recaptaci&oacute;n de Pacientes</span>
+            <span class="menu-card-description">Gestione el seguimiento de pacientes para mantener una atenci&oacute;n continua.</span>
+          </span>
+          <span class="menu-card-arrow" aria-hidden="true"></span>
+        </button>
+        <button id="btnMenuSkinLab" class="menu-card-button menu-card-skinlab">
+          <span class="menu-card-icon" aria-hidden="true">
+            <svg viewBox="0 0 64 64" focusable="false">
+              <path d="M10 22.5c0-3 2.4-5.5 5.5-5.5h11.2c2 0 3.8.9 5 2.5l2.1 2.8h14.7c3 0 5.5 2.4 5.5 5.5v2.7H10v-8Z"></path>
+              <path d="M10 29h44l-2.6 22.2c-.4 3-2.9 5.3-5.9 5.3h-31c-3 0-5.5-2.3-5.9-5.3L6 29h4Z"></path>
+              <path d="M14 29v-8"></path>
+            </svg>
+          </span>
+          <span class="menu-card-copy">
+            <span class="menu-card-title">Skin Lab</span>
+            <span class="menu-card-description">Consulte los formularios previos al tratamiento de sus pacientes.</span>
+          </span>
+          <span class="menu-card-arrow" aria-hidden="true"></span>
+        </button>
       </div>
       <div class="actions">
-        <button id="btnMenuBack" class="secondary">Cerrar Panel</button>
+        <button id="btnMenuBack" class="secondary panel-command panel-command-close">
+          <span class="panel-command-icon" aria-hidden="true"></span>
+          <span>Cerrar Panel</span>
+        </button>
       </div>
     </div>
   </section>
@@ -178,7 +264,7 @@
     <div class="card">
       <p class="eyebrow">Gesti&oacute;n cl&iacute;nica</p>
       <h2>Procedimientos</h2>
-      <p class="section-copy">Administre procedimientos y configure las opciones disponibles para documentos cl&iacute;nicos.</p>
+      <p class="section-copy">Administre los procedimientos disponibles.</p>
       <div class="procedure-add">
         <input type="text" id="inputNewProcedure" placeholder="Agregar procedimiento">
         <button id="btnAddProcedure">Crear</button>
@@ -191,29 +277,87 @@
   </section>
   <section class="step hidden" id="stepHistory">
     <div class="card">
-      <h2>Documentaci&oacute;n Cl&iacute;nica</h2>
-      <div class="history-controls">
+      <h2 id="historyTitle">Documentaci&oacute;n Cl&iacute;nica</h2>
+      <div class="history-controls" id="historyControls">
         <div class="history-control-block history-search-block">
           <label for="historySearch">B&uacute;squeda</label>
           <input type="search" id="historySearch" placeholder="Buscar paciente, procedimiento o RUT">
         </div>
-        <div class="history-control-block history-month-block">
-          <label for="historyMonth">Filtro mensual</label>
+        <div class="history-control-block history-month-block" id="historyMonthBlock">
+          <label for="historyMonth">Filtrar respaldo por mes</label>
           <div class="history-control-row">
-            <input type="month" id="historyMonth" aria-label="Mes del historial">
-            <button id="btnExportMonth" class="secondary">Exportar mes</button>
+            <input type="month" id="historyMonth">
+            <button id="btnExportMonth" class="secondary">Descargar mes</button>
             <button id="btnDeleteMonth" class="danger subtle-danger">Eliminar mes</button>
           </div>
         </div>
       </div>
       <div id="historyList" class="history-list"></div>
+      <div id="historyPagination" class="history-pagination" aria-live="polite"></div>
       <div class="history-backup-panel">
         <p class="eyebrow">Respaldo general</p>
         <p>Exporte todos los registros almacenados del historial cl&iacute;nico.</p>
         <button id="btnExportBackup">Exportar historial completo</button>
       </div>
+    </div>
+  </section>
+  <section class="step hidden" id="stepRecapture">
+    <div class="card">
+      <p class="eyebrow">Seguimiento activo</p>
+      <h2>Recaptaci&oacute;n</h2>
+      <p class="section-copy">Gestione el seguimiento de pacientes para mantener una atenci&oacute;n continua.</p>
+      <div class="recapture-stats" aria-live="polite">
+        <div class="recapture-stat-card recapture-stat-pending">
+          <span class="recapture-stat-icon" aria-hidden="true"></span>
+          <span class="recapture-stat-copy">
+            <span class="recapture-stat-label">Pendientes este mes</span>
+            <strong id="recapturePendingCount">0</strong>
+            <span class="recapture-stat-unit">pacientes</span>
+          </span>
+        </div>
+        <div class="recapture-stat-card recapture-stat-contacted">
+          <span class="recapture-stat-icon" aria-hidden="true"></span>
+          <span class="recapture-stat-copy">
+            <span class="recapture-stat-label">Contactadas</span>
+            <strong id="recaptureContactedCount">0</strong>
+            <span class="recapture-stat-unit">pacientes</span>
+          </span>
+        </div>
+        <div class="recapture-stat-card recapture-stat-scheduled">
+          <span class="recapture-stat-icon" aria-hidden="true"></span>
+          <span class="recapture-stat-copy">
+            <span class="recapture-stat-label">Agendaron cita</span>
+            <strong id="recaptureScheduledCount">0</strong>
+            <span class="recapture-stat-unit">pacientes</span>
+          </span>
+        </div>
+      </div>
+      <div class="recapture-controls">
+        <div class="recapture-month-bar">
+          <button id="btnRecapturePrevMonth" class="recapture-month-arrow" type="button" aria-label="Mes anterior">
+            <span class="recapture-arrow-left" aria-hidden="true"></span>
+          </button>
+          <label class="recapture-month-field" for="recaptureMonth">
+            <input type="month" id="recaptureMonth" aria-label="Mes de contacto">
+          </label>
+          <button id="btnRecaptureNextMonth" class="recapture-month-arrow" type="button" aria-label="Mes siguiente">
+            <span class="recapture-arrow-right" aria-hidden="true"></span>
+          </button>
+        </div>
+        <div class="recapture-search-box">
+          <span class="recapture-search-icon" aria-hidden="true"></span>
+          <input type="search" id="recaptureSearch" placeholder="Buscar paciente o RUT">
+        </div>
+        <div class="recapture-active-note">
+          <span class="recapture-info-icon" aria-hidden="true"></span>
+          <strong>Solo tareas activas</strong>
+          <span>Las tareas agendadas se eliminan de esta bandeja.</span>
+        </div>
+      </div>
+      <div id="recaptureList" class="recapture-list" aria-live="polite"></div>
+      <div id="recapturePagination" class="history-pagination recapture-pagination" aria-live="polite"></div>
       <div class="actions">
-        <button id="btnHistoryBack" class="secondary">Volver</button>
+        <button id="btnRecaptureBack" class="secondary">Volver al panel</button>
       </div>
     </div>
   </section>
@@ -245,6 +389,17 @@
     </div>
   </div>
 </div>
+<div class="modal-backdrop hidden" id="confirmModal" role="dialog" aria-modal="true" aria-labelledby="confirmModalTitle">
+  <div class="modal-card">
+    <p class="eyebrow" id="confirmModalEyebrow">Confirmaci&oacute;n</p>
+    <h2 id="confirmModalTitle">Confirmar acci&oacute;n</h2>
+    <p class="modal-copy" id="confirmModalText"></p>
+    <div class="actions modal-actions">
+      <button id="btnConfirmCancel" class="secondary">Cancelar</button>
+      <button id="btnConfirmOk">Confirmar</button>
+    </div>
+  </div>
+</div>
 <div class="modal-backdrop hidden" id="documentPreviewModal" role="dialog" aria-modal="true" aria-labelledby="documentPreviewTitle">
   <div class="modal-card document-preview-card">
     <p class="eyebrow">Documento cl&iacute;nico</p>
@@ -258,6 +413,7 @@
 </div>
 <script src="lib/pdf-lib.min.js"></script>
 <script src="lib/pdf.min.js"></script>
+<script src="lib/pdf.worker.min.js"></script>
 <script src="lib/jszip.min.js"></script>
 <script src="js/signature.js"></script>
 <script src="js/storage.js"></script>

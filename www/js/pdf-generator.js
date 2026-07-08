@@ -31,15 +31,16 @@ const PdfGenerator = (() => {
   const PAGE2 = {
     general: {
       firmaPaciente: { x: 82, y: 296, width: 216, height: 42 },
-      rutPaciente: { x: 120, y: 330 },
-      firmaDra: { x: 322, y: 298, width: 216, height: 40 }
+      rutPaciente: { x: 120, y: 344 },
+      firmaDra: { x: 300, y: 300, width: 250, height: 92 }
     },
     toxina: {
       firmaPaciente: { x: 82, y: 170, width: 216, height: 42 },
-      rutPaciente: { x: 120, y: 198 },
-      firmaDra: { x: 322, y: 172, width: 216, height: 40 }
+      rutPaciente: { x: 120, y: 212 },
+      firmaDra: { x: 300, y: 174, width: 250, height: 92 }
     }
   };
+  const DOCTOR_SIGNATURE_SCALE = 0.82;
   const ASSESSMENT_MARKS = [
     { id: 'piel', page: 0, y: 535.4 },
     { id: 'arrugas', page: 0, y: 436.1 },
@@ -53,9 +54,21 @@ const PdfGenerator = (() => {
     { id: 'hidratacion', page: 1, y: 309.6 }
   ];
   const ASSESSMENT_VALUE_X = [107.6, 147.3, 186.9, 226.6, 266.3, 306, 345.7, 385.4, 425.1, 464.7, 504.4];
+  const SKIN_LAB_FIELDS = {
+    fecha: {
+      day: { x: 468, y: 31.8, width: 16 },
+      month: { x: 506, y: 31.8, width: 16 },
+      year: { x: 535, y: 31.8, width: 32 }
+    },
+    nombre: { x: 162, y: 642.2, width: 344 },
+    edad: { x: 162, y: 624.2, width: 90 },
+    goals: { x: 78, y: 558, width: 460, maxLines: 4, lineHeight: 13 },
+    concern: { x: 78, y: 452, width: 460, maxLines: 7, lineHeight: 13 },
+    considerations: { x: 78, y: 271, width: 460, maxLines: 7, lineHeight: 13 }
+  };
 
   async function fetchArrayBuffer(url) {
-    const embeddedAsset = window.PdfEmbeddedAssets && window.PdfEmbeddedAssets[url];
+    const embeddedAsset = getEmbeddedAsset(url);
     if (embeddedAsset) {
       return base64ToArrayBuffer(embeddedAsset);
     }
@@ -70,6 +83,16 @@ const PdfGenerator = (() => {
     }
 
     return await fetchArrayBufferWithXhr(url);
+  }
+
+  function getEmbeddedAsset(url) {
+    const assets = window.PdfEmbeddedAssets;
+    if (!assets) {
+      return null;
+    }
+
+    const normalizedUrl = url.replace(/^\.\//, '');
+    return assets[url] || assets[normalizedUrl] || assets[`./${normalizedUrl}`] || null;
   }
 
   function base64ToArrayBuffer(base64) {
@@ -108,8 +131,30 @@ const PdfGenerator = (() => {
     return bytes;
   }
 
+  function loadImageAsPngBytes(url) {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = image.naturalWidth || image.width;
+          canvas.height = image.naturalHeight || image.height;
+
+          const context = canvas.getContext('2d');
+          context.clearRect(0, 0, canvas.width, canvas.height);
+          context.drawImage(image, 0, 0);
+          resolve(dataUrlToBytes(canvas.toDataURL('image/png')));
+        } catch (error) {
+          reject(error);
+        }
+      };
+      image.onerror = () => reject(new Error(`No se pudo cargar ${url}`));
+      image.src = url;
+    });
+  }
+
   async function embedDoctorSignature(pdfDoc) {
-    const signatureFiles = ['assets/firmaPaty.png'];
+    const signatureFiles = ['assets/firmaPaty.png', './assets/firmaPaty.png'];
     let lastError = null;
 
     for (const file of signatureFiles) {
@@ -119,9 +164,17 @@ const PdfGenerator = (() => {
       } catch (error) {
         lastError = error;
       }
+
+      try {
+        const bytes = await loadImageAsPngBytes(file);
+        return await pdfDoc.embedPng(bytes);
+      } catch (error) {
+        lastError = error;
+      }
     }
 
-    throw lastError || new Error('No se pudo cargar la firma de la Dra. Paty.');
+    console.warn('No se pudo cargar la firma de la Dra. Paty. El PDF se generara sin esa imagen.', lastError);
+    return null;
   }
 
   function drawImageInBox(page, image, box, scaleFactor = 1) {
@@ -253,7 +306,9 @@ const PdfGenerator = (() => {
       const page2Coords = PAGE2[options.consentType] || PAGE2.general;
       page2.drawText(options.paciente.rut, { x: page2Coords.rutPaciente.x, y: page2Coords.rutPaciente.y, size: fontSize, font, maxWidth: 180 });
       const doctorSignatureImage = await embedDoctorSignature(pdfDoc);
-      drawImageInBox(page2, doctorSignatureImage, page2Coords.firmaDra, 1);
+      if (doctorSignatureImage) {
+        drawImageInBox(page2, doctorSignatureImage, page2Coords.firmaDra, DOCTOR_SIGNATURE_SCALE);
+      }
     }
 
     const pdfBytes = await pdfDoc.save();
@@ -288,6 +343,108 @@ const PdfGenerator = (() => {
 
     const pdfBytes = await pdfDoc.save();
     return { pdfBytes, fileName: buildAssessmentFileName(options) };
+  }
+
+  async function generateSkinLabPdf(options) {
+    const existingPdfBytes = await fetchArrayBuffer('assets/skin_lab.pdf');
+    const pdfDoc = await PDFLib.PDFDocument.load(existingPdfBytes);
+    const font = await pdfDoc.embedFont(PDFLib.StandardFonts.Helvetica);
+    const boldFont = await pdfDoc.embedFont(PDFLib.StandardFonts.HelveticaBold);
+    const page = pdfDoc.getPage(0);
+    const ink = PDFLib.rgb(0.16, 0.13, 0.11);
+    const muted = PDFLib.rgb(0.46, 0.42, 0.38);
+    const patient = options.paciente || {};
+    const dateParts = getDateParts(options.fecha || formatDate(new Date()));
+
+    function drawTextBlock(text, field, fontToUse = font, size = 10, color = ink) {
+      const lines = wrapText(text || '', field.width, fontToUse, size, field.maxLines);
+      lines.forEach((line, index) => {
+        page.drawText(line, {
+          x: field.x,
+          y: field.y - (index * field.lineHeight),
+          size,
+          font: fontToUse,
+          color
+        });
+      });
+    }
+
+    drawTextFitWidth(page, dateParts.day, SKIN_LAB_FIELDS.fecha.day.x, SKIN_LAB_FIELDS.fecha.day.y, {
+      font,
+      size: 10,
+      maxWidth: SKIN_LAB_FIELDS.fecha.day.width,
+      minSize: 8,
+      ellipsis: false
+    });
+    drawTextFitWidth(page, dateParts.month, SKIN_LAB_FIELDS.fecha.month.x, SKIN_LAB_FIELDS.fecha.month.y, {
+      font,
+      size: 10,
+      maxWidth: SKIN_LAB_FIELDS.fecha.month.width,
+      minSize: 8,
+      ellipsis: false
+    });
+    drawTextFitWidth(page, dateParts.year, SKIN_LAB_FIELDS.fecha.year.x, SKIN_LAB_FIELDS.fecha.year.y, {
+      font,
+      size: 10,
+      maxWidth: SKIN_LAB_FIELDS.fecha.year.width,
+      minSize: 8,
+      ellipsis: false
+    });
+    drawTextFitWidth(page, patient.nombre || '', SKIN_LAB_FIELDS.nombre.x, SKIN_LAB_FIELDS.nombre.y, {
+      font: boldFont,
+      size: 10.5,
+      maxWidth: SKIN_LAB_FIELDS.nombre.width,
+      minSize: 8
+    });
+    drawTextFitWidth(page, `${patient.edad || ''} años`, SKIN_LAB_FIELDS.edad.x, SKIN_LAB_FIELDS.edad.y, {
+      font: boldFont,
+      size: 10.5,
+      maxWidth: SKIN_LAB_FIELDS.edad.width,
+      minSize: 8
+    });
+
+    drawTextBlock((options.goals || []).join(' - '), SKIN_LAB_FIELDS.goals, font, 10, muted);
+    drawTextBlock(options.concern || 'Sin informacion registrada.', SKIN_LAB_FIELDS.concern, font, 10, ink);
+    drawTextBlock(options.considerations || 'Sin consideraciones adicionales registradas.', SKIN_LAB_FIELDS.considerations, font, 10, ink);
+
+    const pdfBytes = await pdfDoc.save();
+    return { pdfBytes, fileName: buildSkinLabFileName(options) };
+  }
+
+  function wrapText(text, maxWidth, font, size, maxLines = Infinity) {
+    const words = String(text || '').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+    if (!words.length) {
+      return [];
+    }
+
+    const lines = [];
+    let line = '';
+    words.forEach((word) => {
+      if (lines.length >= maxLines) {
+        return;
+      }
+
+      const testLine = line ? `${line} ${word}` : word;
+      if (font.widthOfTextAtSize(testLine, size) <= maxWidth) {
+        line = testLine;
+        return;
+      }
+
+      if (line) {
+        lines.push(line);
+        if (lines.length >= maxLines) {
+          line = '';
+          return;
+        }
+      }
+      line = word;
+    });
+
+    if (line && lines.length < maxLines) {
+      lines.push(line);
+    }
+
+    return lines;
   }
 
   function clampScore(value) {
@@ -337,6 +494,18 @@ const PdfGenerator = (() => {
     return `autoevaluacion-${paciente}-${timestamp}.pdf`;
   }
 
+  function buildSkinLabFileName(options) {
+    const firstName = String(options.paciente?.nombre || 'paciente').trim().split(/\s+/)[0] || 'paciente';
+    const paciente = firstName
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 80);
+    const timestamp = formatDateForFile(new Date());
+    return `skin-lab-${paciente}-${timestamp}.pdf`;
+  }
+
   function formatDate(date) {
     return date.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' });
   }
@@ -366,6 +535,20 @@ const PdfGenerator = (() => {
     return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year.padStart(4, '0')}`;
   }
 
+  function getDateParts(value) {
+    const formatted = formatDateForDisplay(value);
+    const match = formatted.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (!match) {
+      return { day: '', month: '', year: '' };
+    }
+
+    return {
+      day: match[1],
+      month: match[2],
+      year: match[3]
+    };
+  }
+
   function formatDateForFile(date) {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -376,6 +559,7 @@ const PdfGenerator = (() => {
   return {
     generateConsentPdf,
     generateAssessmentPdf,
+    generateSkinLabPdf,
     buildFileName
   };
 })();

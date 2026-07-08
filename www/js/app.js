@@ -11,19 +11,35 @@ const App = {
       respuestas: {},
       touched: {}
     },
+    skinLab: {
+      goals: []
+    },
     signatureDataUrl: null,
     historyAccessGranted: false,
-    protectedTarget: 'menu'
+    protectedTarget: 'menu',
+    historyPage: 1,
+    historyArea: 'clinical',
+    recaptureMonth: '',
+    recapturePage: 1
   },
   signaturePad: null,
   historyRecords: [],
+  recaptureRecords: [],
+  recaptureStats: {},
   procedures: [],
   pdfRenderToken: 0,
   previewRecord: null,
-  pendingFocusTarget: null
+  pendingFocusTarget: null,
+  pendingConfirmAction: null
 };
 const HISTORY_PIN = '0000';
 const PROCEDURES_STORAGE_KEY = 'iconicProcedimientos';
+const RECAPTURE_STORAGE_KEY = 'iconicRecaptacion';
+const RECAPTURE_STATS_STORAGE_KEY = 'iconicRecaptacionStats';
+const RECAPTURE_STATUS = {
+  pending: 'Pendiente',
+  contacted: 'Contactada'
+};
 const DEFAULT_PROCEDURES = [
   'Toxina Botulínica',
   'Ácido hialurónico',
@@ -31,8 +47,11 @@ const DEFAULT_PROCEDURES = [
   'Radiesse',
   'Stimulate',
   'Polinucleotidos',
-  'Mallas PDO'
+  'Mallas PDO',
+  'Hialuronidasa y Colagenasa'
 ];
+const HISTORY_PAGE_SIZE = 6;
+const RECAPTURE_PAGE_SIZE = 6;
 const DEFAULT_CONFIG = {
   doctora: 'Patricia Navarrete',
   general: DEFAULT_PROCEDURES,
@@ -100,6 +119,36 @@ const ASSESSMENT_QUESTIONS = [
     question: '¿Cómo te sientes con respecto a la hidratación y luminosidad de tu piel?'
   }
 ];
+const SKIN_LAB_GOALS = [
+  'Acne o brotes',
+  'Manchas',
+  'Deshidratacion',
+  'Poros visibles',
+  'Lineas finas o arrugas',
+  'Flacidez',
+  'Falta de luminosidad'
+];
+const SKIN_LAB_GOAL_META = {
+  'Acne o brotes': 'Acn&eacute; o brotes',
+  Manchas: 'Manchas',
+  Deshidratacion: 'Deshidrataci&oacute;n',
+  'Poros visibles': 'Poros visibles',
+  'Lineas finas o arrugas': 'L&iacute;neas finas<br>o arrugas',
+  Flacidez: 'Flacidez',
+  'Falta de luminosidad': 'Falta de<br>luminosidad'
+};
+const ASSESSMENT_TO_SKINLAB_GOAL_MAP = {
+  piel: 'Falta de luminosidad',
+  arrugas: 'Lineas finas o arrugas',
+  grasa: 'Poros visibles',
+  volumen: 'Flacidez',
+  flacidez: 'Flacidez',
+  labios: 'Lineas finas o arrugas',
+  mirada: 'Falta de luminosidad',
+  textura: 'Poros visibles',
+  manchas: 'Manchas',
+  hidratacion: 'Deshidratacion'
+};
 window.addEventListener('DOMContentLoaded', initApp);
 
 async function initApp() {
@@ -114,6 +163,9 @@ async function initApp() {
   setBirthDateLimit();
   App.config = await loadConfig();
   App.procedures = loadStoredProcedures(App.config.general);
+  App.recaptureRecords = loadRecaptureRecords();
+  App.recaptureStats = loadRecaptureStats();
+  App.state.recaptureMonth = getMonthKey(new Date());
   bindEvents();
   showStep('select');
   await refreshHistory();
@@ -165,6 +217,11 @@ function loadStoredProcedures(defaultProcedures) {
         enabled: storedProcedure ? storedProcedure.enabled : true
       };
     });
+    storedProcedures.forEach((procedure) => {
+      if (!procedures.some((item) => normalizeProcedureName(item.name) === normalizeProcedureName(procedure.name))) {
+        procedures.push(procedure);
+      }
+    });
 
     localStorage.setItem(PROCEDURES_STORAGE_KEY, JSON.stringify(procedures));
     return procedures;
@@ -182,14 +239,84 @@ function normalizeProcedureName(name) {
   return name.trim().toLowerCase();
 }
 
+function loadRecaptureRecords() {
+  try {
+    const records = JSON.parse(localStorage.getItem(RECAPTURE_STORAGE_KEY) || '[]');
+    if (!Array.isArray(records)) {
+      return [];
+    }
+
+    return records
+      .filter((record) => record && record.id && record.status !== 'scheduled')
+      .map((record) => ({
+        id: record.id,
+        nombre: record.nombre || '',
+        rut: record.rut || '',
+        procedimiento: record.procedimiento || '',
+        consentDate: record.consentDate || '',
+        contactFrom: record.contactFrom || '',
+        status: record.status === 'contacted' ? 'contacted' : 'pending',
+        contactedAt: record.contactedAt || '',
+        contactedMonth: record.contactedMonth || (record.status === 'contacted' ? getMonthKey(record.contactFrom || '') : ''),
+        createdAt: record.createdAt || new Date().toISOString()
+      }))
+      .sort((a, b) => a.contactFrom.localeCompare(b.contactFrom) || a.createdAt.localeCompare(b.createdAt));
+  } catch (error) {
+    console.error('Error cargando recaptacion:', error);
+    return [];
+  }
+}
+
+function saveRecaptureRecords() {
+  localStorage.setItem(RECAPTURE_STORAGE_KEY, JSON.stringify(App.recaptureRecords));
+}
+
+function loadRecaptureStats() {
+  try {
+    const stats = JSON.parse(localStorage.getItem(RECAPTURE_STATS_STORAGE_KEY) || '{}');
+    if (!stats || typeof stats !== 'object') {
+      return { totalScheduled: 0 };
+    }
+
+    const totalScheduled = Number.isFinite(Number(stats.totalScheduled))
+      ? Number(stats.totalScheduled)
+      : getStoredScheduledTotal(stats);
+
+    return {
+      ...stats,
+      totalScheduled
+    };
+  } catch (error) {
+    console.error('Error cargando estadisticas de recaptacion:', error);
+    return { totalScheduled: 0 };
+  }
+}
+
+function saveRecaptureStats() {
+  localStorage.setItem(RECAPTURE_STATS_STORAGE_KEY, JSON.stringify(App.recaptureStats));
+}
+
+function getStoredScheduledTotal(stats) {
+  return Object.values(stats || {}).reduce((total, value) => {
+    if (!value || typeof value !== 'object') {
+      return total;
+    }
+
+    return total + Number(value.scheduled || 0);
+  }, 0);
+}
+
 function getEnabledProcedures() {
   return App.procedures.filter((procedure) => procedure.enabled).map((procedure) => procedure.name);
 }
 
 function bindEvents() {
   document.getElementById('btnStartAssessment').addEventListener('click', startAssessment);
+  document.getElementById('btnStartSkinLab').addEventListener('click', startSkinLab);
   document.getElementById('btnAssessmentBack').addEventListener('click', () => showStep('select'));
   document.getElementById('btnGenerateAssessment').addEventListener('click', createAssessmentPdf);
+  document.getElementById('btnSkinLabBack').addEventListener('click', () => showStep('select'));
+  document.getElementById('btnGenerateSkinLab').addEventListener('click', createSkinLabPdf);
   document.getElementById('btnGeneral').addEventListener('click', () => selectConsent('general'));
   document.getElementById('btnToxina').addEventListener('click', () => selectConsent('toxina'));
   document.getElementById('btnPdfContinue').addEventListener('click', () => showStep('form'));
@@ -198,6 +325,8 @@ function bindEvents() {
   document.getElementById('selectTratamiento').addEventListener('change', onTreatmentSelect);
   document.getElementById('inputRut').addEventListener('input', onRutInput);
   document.getElementById('inputRut').addEventListener('blur', onRutBlur);
+  document.getElementById('inputFechaNacimiento').addEventListener('input', onBirthDateInput);
+  document.getElementById('inputFechaNacimiento').addEventListener('blur', onBirthDateBlur);
   document.getElementById('btnFormContinue').addEventListener('click', onFormContinue);
   document.getElementById('btnFormBack').addEventListener('click', () => showStep('pdf'));
   document.getElementById('btnClearSignature').addEventListener('click', () => {
@@ -218,22 +347,38 @@ function bindEvents() {
   document.getElementById('btnSignatureBack').addEventListener('click', () => showStep('form'));
   document.getElementById('btnGoHistory').addEventListener('click', requestHistoryAccess);
   document.getElementById('btnShowHistory').addEventListener('click', requestHistoryAccess);
-  document.getElementById('btnMenuHistory').addEventListener('click', () => openProtectedStep('history'));
+  document.getElementById('btnMenuHistory').addEventListener('click', () => openHistoryArea('clinical'));
   document.getElementById('btnMenuProcedures').addEventListener('click', () => openProtectedStep('procedures'));
+  document.getElementById('btnMenuRecapture').addEventListener('click', () => openProtectedStep('recapture'));
+  document.getElementById('btnMenuSkinLab').addEventListener('click', () => openHistoryArea('skinLab'));
   document.getElementById('btnMenuBack').addEventListener('click', () => showStep('select'));
   document.getElementById('btnProceduresBack').addEventListener('click', () => openProtectedStep('menu'));
+  document.getElementById('btnRecaptureBack').addEventListener('click', () => openProtectedStep('menu'));
   document.getElementById('btnAddProcedure').addEventListener('click', addProcedure);
   document.getElementById('inputNewProcedure').addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       addProcedure();
     }
   });
-  document.getElementById('btnHistoryBack').addEventListener('click', () => openProtectedStep('menu'));
-  document.getElementById('historySearch').addEventListener('input', refreshHistory);
-  document.getElementById('historyMonth').addEventListener('change', refreshHistory);
+  document.getElementById('btnHistoryBackTop').addEventListener('click', () => openProtectedStep('menu'));
+  document.getElementById('historySearch').addEventListener('input', () => {
+    App.state.historyPage = 1;
+    refreshHistory();
+  });
   document.getElementById('btnExportBackup').addEventListener('click', exportBackup);
   document.getElementById('btnExportMonth').addEventListener('click', exportMonthBackup);
   document.getElementById('btnDeleteMonth').addEventListener('click', deleteMonthRecords);
+  document.getElementById('recaptureMonth').addEventListener('change', () => {
+    App.state.recaptureMonth = document.getElementById('recaptureMonth').value || getMonthKey(new Date());
+    App.state.recapturePage = 1;
+    renderRecaptureView();
+  });
+  document.getElementById('btnRecapturePrevMonth').addEventListener('click', () => changeRecaptureMonth(-1));
+  document.getElementById('btnRecaptureNextMonth').addEventListener('click', () => changeRecaptureMonth(1));
+  document.getElementById('recaptureSearch').addEventListener('input', () => {
+    App.state.recapturePage = 1;
+    renderRecaptureView();
+  });
   document.getElementById('btnPinCancel').addEventListener('click', closePinModal);
   document.getElementById('btnPinSubmit').addEventListener('click', submitHistoryPin);
   document.getElementById('pinInput').addEventListener('input', onPinInput);
@@ -243,6 +388,8 @@ function bindEvents() {
     }
   });
   document.getElementById('btnMessageOk').addEventListener('click', closeMessageModal);
+  document.getElementById('btnConfirmCancel').addEventListener('click', closeConfirmModal);
+  document.getElementById('btnConfirmOk').addEventListener('click', confirmModalAction);
   document.getElementById('btnCloseDocumentPreview').addEventListener('click', closeDocumentPreview);
   document.getElementById('btnDownloadPreviewDocument').addEventListener('click', downloadPreviewDocument);
 }
@@ -273,6 +420,17 @@ function startAssessment() {
   showStep('assessment');
 }
 
+function startSkinLab() {
+  resetSkinLabFlow();
+  showStep('skinLab');
+}
+
+function openHistoryArea(area) {
+  App.state.historyArea = area;
+  App.state.historyPage = 1;
+  openProtectedStep('history');
+}
+
 function resetAssessmentFlow() {
   App.state.assessment = {
     paciente: '',
@@ -293,6 +451,40 @@ function resetAssessmentFlow() {
   renderAssessmentQuestions();
 }
 
+function resetSkinLabFlow() {
+  App.state.skinLab = {
+    goals: []
+  };
+
+  const form = document.getElementById('skinLabForm');
+  if (form) {
+    form.reset();
+  }
+
+  const derived = deriveSkinLabDataFromAssessment();
+  if (derived) {
+    const nombreInput = document.getElementById('skinLabNombre');
+    const concernInput = document.getElementById('skinLabConcern');
+    const considerationsInput = document.getElementById('skinLabConsiderations');
+
+    if (nombreInput && !nombreInput.value.trim()) {
+      nombreInput.value = derived.nombre;
+    }
+
+    if (concernInput && !concernInput.value.trim()) {
+      concernInput.value = derived.concern;
+    }
+
+    if (considerationsInput && !considerationsInput.value.trim()) {
+      considerationsInput.value = derived.considerations;
+    }
+
+    App.state.skinLab.goals = derived.goals;
+  }
+
+  renderSkinLabGoals();
+}
+
 function resetPatientForm() {
   const form = document.getElementById('patientForm');
   if (form) {
@@ -305,7 +497,6 @@ function resetPatientForm() {
       input.value = '';
     }
   });
-
   document.querySelectorAll('input[name="autorizacion"]').forEach((input) => {
     input.checked = false;
   });
@@ -351,6 +542,7 @@ async function renderPdfPreview(asset) {
   const viewer = document.getElementById('pdfRenderViewer');
   const renderToken = App.pdfRenderToken + 1;
   App.pdfRenderToken = renderToken;
+  await waitForNextFrame();
   await renderPdfIntoViewer(asset, viewer, {
     loadingText: 'Cargando PDF original...',
     errorText: 'No se pudo visualizar el PDF original. Vuelva atras e intente nuevamente.',
@@ -366,8 +558,7 @@ async function renderPdfIntoViewer(source, viewer, options = {}) {
       throw new Error('No se pudo cargar el visor PDF.');
     }
 
-    const loadingTask = window.pdfjsLib.getDocument(source);
-    const pdf = await loadingTask.promise;
+    const pdf = await loadPdfDocument(source);
 
     if (options.shouldContinue && !options.shouldContinue()) {
       return;
@@ -398,8 +589,86 @@ async function renderPdfIntoViewer(source, viewer, options = {}) {
     }
   } catch (error) {
     console.error('Error renderizando PDF:', error);
+    if (typeof source === 'string') {
+      renderNativePdfFallback(viewer, source, options.errorText);
+      return;
+    }
+
     viewer.innerHTML = `<p class="pdf-render-status">${options.errorText || 'No se pudo visualizar el PDF.'}</p>`;
   }
+}
+
+async function loadPdfDocument(source) {
+  if (typeof source === 'string') {
+    try {
+      const data = await loadPdfBytes(source);
+      return await window.pdfjsLib.getDocument({ data }).promise;
+    } catch (bytesError) {
+      console.warn('No se pudo cargar PDF como bytes, intentando por URL:', bytesError);
+    }
+  }
+
+  try {
+    return await window.pdfjsLib.getDocument(normalizePdfSource(source)).promise;
+  } catch (error) {
+    throw error;
+  }
+}
+
+function loadPdfBytes(url) {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open('GET', url, true);
+    request.responseType = 'arraybuffer';
+    request.onload = () => {
+      if (request.status && (request.status < 200 || request.status >= 300)) {
+        reject(new Error(`No se pudo cargar ${url}`));
+        return;
+      }
+
+      resolve(new Uint8Array(request.response));
+    };
+    request.onerror = () => reject(new Error(`No se pudo cargar ${url}`));
+    request.send();
+  });
+}
+
+function renderNativePdfFallback(viewer, source, message) {
+  viewer.innerHTML = '';
+
+  const object = document.createElement('object');
+  object.className = 'pdf-native-viewer';
+  object.type = 'application/pdf';
+  object.data = source;
+
+  const fallback = document.createElement('p');
+  fallback.className = 'pdf-render-status';
+  fallback.textContent = message || 'No se pudo visualizar el PDF con el visor interno.';
+
+  object.appendChild(fallback);
+  viewer.appendChild(object);
+}
+
+function normalizePdfSource(source) {
+  if (typeof source === 'string') {
+    return {
+      url: source,
+      disableWorker: true
+    };
+  }
+
+  if (source && typeof source === 'object') {
+    return {
+      ...source,
+      disableWorker: true
+    };
+  }
+
+  return source;
+}
+
+function waitForNextFrame() {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
 }
 
 function updateReadContinue() {
@@ -414,6 +683,7 @@ function showStep(stepId) {
 
   document.querySelectorAll('.step').forEach((section) => section.classList.add('hidden'));
   document.getElementById(`step${capitalize(stepId)}`).classList.remove('hidden');
+  document.getElementById('btnHistoryBackTop').classList.toggle('hidden', stepId !== 'history');
   App.state.historyAccessGranted = false;
 
   if (stepId === 'form') {
@@ -424,6 +694,10 @@ function showStep(stepId) {
     renderAssessmentQuestions();
   }
 
+  if (stepId === 'skinLab') {
+    renderSkinLabGoals();
+  }
+
   if (stepId === 'history') {
     refreshHistory();
   }
@@ -432,13 +706,17 @@ function showStep(stepId) {
     renderProcedureManager();
   }
 
+  if (stepId === 'recapture') {
+    renderRecaptureView();
+  }
+
   if (stepId === 'signature') {
     setTimeout(() => App.signaturePad.resize(), 0);
   }
 }
 
 function isProtectedStep(stepId) {
-  return ['menu', 'history', 'procedures'].includes(stepId);
+  return ['menu', 'history', 'procedures', 'recapture'].includes(stepId);
 }
 
 function capitalize(value) {
@@ -448,13 +726,16 @@ function capitalize(value) {
 function populateTreatmentOptions() {
   const container = document.getElementById('treatmentContainer');
   const select = document.getElementById('selectTratamiento');
-  select.innerHTML = '';
+  if (!container || !select) {
+    return;
+  }
 
   container.style.display = 'block';
   const enabledProcedures = getEnabledProcedures();
   const enabledProcedureSet = new Set(enabledProcedures);
   App.state.tratamientos = App.state.tratamientos.filter((treatment) => enabledProcedureSet.has(treatment));
   App.state.tratamiento = getSelectedTreatmentText();
+  select.innerHTML = '';
 
   const placeholder = document.createElement('option');
   placeholder.value = '';
@@ -463,12 +744,19 @@ function populateTreatmentOptions() {
   placeholder.selected = true;
   select.appendChild(placeholder);
 
+  if (!enabledProcedures.length) {
+    renderSelectedTreatments();
+    return;
+  }
+
   enabledProcedures.forEach((treatment) => {
     const option = document.createElement('option');
     option.value = treatment;
     option.textContent = treatment;
+    option.disabled = App.state.tratamientos.includes(treatment);
     select.appendChild(option);
   });
+  select.value = '';
   renderSelectedTreatments();
 }
 
@@ -482,13 +770,14 @@ function onTreatmentSelect(event) {
   App.state.tratamientos.push(treatment);
   App.state.tratamiento = getSelectedTreatmentText();
   event.target.value = '';
+  populateTreatmentOptions();
   renderSelectedTreatments();
 }
 
 function removeTreatment(treatment) {
   App.state.tratamientos = App.state.tratamientos.filter((selected) => selected !== treatment);
   App.state.tratamiento = getSelectedTreatmentText();
-  renderSelectedTreatments();
+  populateTreatmentOptions();
 }
 
 function renderSelectedTreatments() {
@@ -554,11 +843,13 @@ function renderAssessmentQuestions() {
     `;
 
     const slider = questionCard.querySelector('input[type="range"]');
+    updateAssessmentSliderFill(slider);
     slider.addEventListener('input', () => {
       const value = Number(slider.value);
       App.state.assessment.respuestas[item.id] = value;
       App.state.assessment.touched[item.id] = true;
       questionCard.querySelector(`#assessmentScore${item.number}`).textContent = String(value);
+      updateAssessmentSliderFill(slider);
       updateAssessmentProgress();
     });
 
@@ -566,6 +857,14 @@ function renderAssessmentQuestions() {
   });
 
   updateAssessmentProgress();
+}
+
+function updateAssessmentSliderFill(slider) {
+  const min = Number(slider.min || 0);
+  const max = Number(slider.max || 100);
+  const value = Number(slider.value || 0);
+  const percent = max === min ? 0 : ((value - min) / (max - min)) * 100;
+  slider.style.setProperty('--slider-fill', `${Math.min(Math.max(percent, 0), 100)}%`);
 }
 
 function updateAssessmentProgress() {
@@ -581,6 +880,93 @@ function updateAssessmentProgress() {
   if (progressBar) {
     progressBar.style.width = `${percent}%`;
   }
+}
+
+function renderSkinLabGoals() {
+  const container = document.getElementById('skinLabGoals');
+  if (!container || container.children.length) {
+    updateSkinLabGoalSelection();
+    return;
+  }
+
+  SKIN_LAB_GOALS.forEach((goal) => {
+    const label = SKIN_LAB_GOAL_META[goal] || goal;
+    const option = document.createElement('div');
+    option.className = 'skin-lab-option';
+    option.dataset.goal = goal;
+    option.setAttribute('role', 'checkbox');
+    option.setAttribute('tabindex', '0');
+    option.setAttribute('aria-checked', 'false');
+    option.innerHTML = `
+      <span class="skin-lab-option-body">
+        <span class="skin-lab-option-label">${label}</span>
+      </span>
+      <span class="skin-lab-check" aria-hidden="true"></span>
+    `;
+
+    option.addEventListener('click', () => toggleSkinLabGoal(goal));
+    option.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        toggleSkinLabGoal(goal);
+      }
+    });
+    container.appendChild(option);
+  });
+
+  updateSkinLabGoalSelection();
+}
+
+function toggleSkinLabGoal(goal) {
+  const selected = App.state.skinLab.goals;
+  if (selected.includes(goal)) {
+    App.state.skinLab.goals = selected.filter((item) => item !== goal);
+  } else {
+    App.state.skinLab.goals = [...selected, goal];
+  }
+
+  updateSkinLabGoalSelection();
+}
+
+function updateSkinLabGoalSelection() {
+  const selected = App.state.skinLab.goals;
+  document.querySelectorAll('.skin-lab-option').forEach((button) => {
+    const isSelected = selected.includes(button.dataset.goal);
+    button.classList.toggle('is-selected', isSelected);
+    button.setAttribute('aria-checked', String(isSelected));
+  });
+}
+
+function deriveSkinLabDataFromAssessment() {
+  const respuestas = App.state.assessment.respuestas || {};
+  const touched = App.state.assessment.touched || {};
+  const touchedCount = Object.values(touched).filter(Boolean).length;
+  const nombre = App.state.assessment.paciente || '';
+
+  if (!touchedCount) {
+    return null;
+  }
+
+  const entries = Object.entries(respuestas).map(([id, value]) => ({ id, score: Number(value) || 0 }));
+  if (!entries.length) {
+    return null;
+  }
+
+  entries.sort((a, b) => a.score - b.score);
+  const goals = [...new Set(entries.slice(0, 3).map(({ id }) => ASSESSMENT_TO_SKINLAB_GOAL_MAP[id]).filter(Boolean))];
+  const topItems = entries.slice(0, 3).map(({ id }) => {
+    const question = ASSESSMENT_QUESTIONS.find((item) => item.id === id);
+    return question ? question.title : id;
+  });
+
+  return {
+    nombre,
+    goals: goals.length ? goals : App.state.skinLab.goals,
+    concern: topItems.length
+      ? `Las principales prioridades identificadas son: ${topItems.join(', ')}.`
+      : 'Se ha detectado prioridad de tratamiento según la evaluación previa.',
+    considerations: 'Generar recomendaciones de Skin Lab en función de la autoevaluación estética y los objetivos declarados.'
+  };
 }
 
 function renderProcedureManager() {
@@ -707,13 +1093,44 @@ function onFormContinue() {
   const nombre = document.getElementById('inputNombre').value.trim();
   const rutInput = document.getElementById('inputRut');
   const rut = formatRut(rutInput.value);
-  const nacimiento = document.getElementById('inputFechaNacimiento').value;
+  const birthInput = document.getElementById('inputFechaNacimiento');
+  const nacimiento = parseBirthDateInput(birthInput.value);
   const direccion = document.getElementById('inputDireccion').value.trim();
   const autorizacion = document.querySelector('input[name="autorizacion"]:checked');
   const treatment = getSelectedTreatmentText();
 
-  if (!nombre || !rut || !nacimiento || !direccion || !treatment || !autorizacion) {
-    showMessage('Datos incompletos', 'Complete todos los campos obligatorios antes de continuar.', 'Atencion', 'Volver a completar');
+  if (!nombre) {
+    showMessage('Datos incompletos', 'Ingrese el nombre completo del paciente.', 'Atencion', 'Volver a completar', 'inputNombre');
+    return;
+  }
+
+  if (!rut) {
+    showMessage('Datos incompletos', 'Ingrese el RUT del paciente.', 'Atencion', 'Volver a completar', 'inputRut');
+    return;
+  }
+
+  if (!birthInput.value.trim()) {
+    showMessage('Datos incompletos', 'Ingrese la fecha de nacimiento del paciente.', 'Atencion', 'Volver a completar', 'inputFechaNacimiento');
+    return;
+  }
+
+  if (!direccion) {
+    showMessage('Datos incompletos', 'Ingrese la direccion del paciente.', 'Atencion', 'Volver a completar', 'inputDireccion');
+    return;
+  }
+
+  if (!treatment) {
+    showMessage('Tratamiento requerido', 'Seleccione al menos un procedimiento para continuar.', 'Atencion', 'Seleccionar tratamiento');
+    return;
+  }
+
+  if (!autorizacion) {
+    showMessage('Datos incompletos', 'Seleccione si autoriza o no el uso de imagen.', 'Atencion', 'Volver a completar');
+    return;
+  }
+
+  if (!isValidBirthDateInput(birthInput.value)) {
+    showMessage('Fecha no valida', 'Ingrese una fecha de nacimiento valida con formato DD/MM/AAAA.', 'Atencion', 'Corregir fecha', 'inputFechaNacimiento');
     return;
   }
 
@@ -729,6 +1146,7 @@ function onFormContinue() {
     return;
   }
 
+  birthInput.value = formatBirthDateMask(birthInput.value);
   rutInput.value = rut;
   App.state.paciente = {
     nombre,
@@ -752,6 +1170,57 @@ function onRutInput(event) {
 
 function onRutBlur(event) {
   event.target.value = formatRut(event.target.value);
+}
+
+function onBirthDateInput(event) {
+  event.target.value = formatBirthDateMask(event.target.value);
+}
+
+function onBirthDateBlur(event) {
+  event.target.value = formatBirthDateMask(event.target.value);
+}
+
+function formatBirthDateMask(value) {
+  const digits = String(value || '').replace(/\D/g, '').slice(0, 8);
+  const parts = [];
+
+  if (digits.length > 0) {
+    parts.push(digits.slice(0, 2));
+  }
+  if (digits.length > 2) {
+    parts.push(digits.slice(2, 4));
+  }
+  if (digits.length > 4) {
+    parts.push(digits.slice(4, 8));
+  }
+
+  return parts.join('/');
+}
+
+function parseBirthDateInput(value) {
+  const match = String(value || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) {
+    return '';
+  }
+
+  return `${match[3]}-${match[2]}-${match[1]}`;
+}
+
+function isValidBirthDateInput(value) {
+  const match = String(value || '').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) {
+    return false;
+  }
+
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+
+  return date.getFullYear() === year
+    && date.getMonth() === month - 1
+    && date.getDate() === day
+    && year >= 1900;
 }
 
 function cleanRut(value) {
@@ -870,6 +1339,32 @@ function closeMessageModal() {
   focusPendingTarget();
 }
 
+function showConfirmModal({ title, message, eyebrow = 'Confirmacion', cancelLabel = 'Cancelar', confirmLabel = 'Confirmar', onConfirm }) {
+  App.pendingConfirmAction = typeof onConfirm === 'function' ? onConfirm : null;
+  document.getElementById('confirmModalEyebrow').textContent = eyebrow;
+  document.getElementById('confirmModalTitle').textContent = title;
+  document.getElementById('confirmModalText').textContent = message;
+  document.getElementById('btnConfirmCancel').textContent = cancelLabel;
+  document.getElementById('btnConfirmOk').textContent = confirmLabel;
+  document.getElementById('confirmModal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('btnConfirmCancel').focus(), 0);
+}
+
+function closeConfirmModal() {
+  App.pendingConfirmAction = null;
+  document.getElementById('confirmModal').classList.add('hidden');
+}
+
+function confirmModalAction() {
+  const action = App.pendingConfirmAction;
+  App.pendingConfirmAction = null;
+  document.getElementById('confirmModal').classList.add('hidden');
+
+  if (action) {
+    action();
+  }
+}
+
 function focusPendingTarget() {
   const target = App.pendingFocusTarget;
   App.pendingFocusTarget = null;
@@ -897,8 +1392,109 @@ function focusPendingTarget() {
 function setBirthDateLimit() {
   const input = document.getElementById('inputFechaNacimiento');
   if (input) {
-    input.max = getTodayInputValue();
+    input.placeholder = 'DD/MM/AAAA';
   }
+}
+
+function populateBirthDateSelectors() {
+  const daySelect = document.getElementById('birthDay');
+  const monthSelect = document.getElementById('birthMonth');
+  const yearSelect = document.getElementById('birthYear');
+  if (!daySelect || !monthSelect || !yearSelect) {
+    return;
+  }
+
+  fillPlaceholderOption(daySelect, 'Día');
+  fillPlaceholderOption(monthSelect, 'Mes');
+  fillPlaceholderOption(yearSelect, 'Año');
+
+  const months = [
+    'Enero',
+    'Febrero',
+    'Marzo',
+    'Abril',
+    'Mayo',
+    'Junio',
+    'Julio',
+    'Agosto',
+    'Septiembre',
+    'Octubre',
+    'Noviembre',
+    'Diciembre'
+  ];
+
+  months.forEach((name, index) => {
+    const option = document.createElement('option');
+    option.value = String(index + 1).padStart(2, '0');
+    option.textContent = name;
+    monthSelect.appendChild(option);
+  });
+
+  const currentYear = new Date().getFullYear();
+  for (let year = currentYear; year >= 1900; year -= 1) {
+    const option = document.createElement('option');
+    option.value = String(year);
+    option.textContent = String(year);
+    yearSelect.appendChild(option);
+  }
+
+  populateBirthDayOptions();
+}
+
+function fillPlaceholderOption(select, label) {
+  select.innerHTML = '';
+  const option = document.createElement('option');
+  option.value = '';
+  option.textContent = label;
+  option.disabled = true;
+  option.selected = true;
+  select.appendChild(option);
+}
+
+function onBirthDateChange(event) {
+  if (event.target.id === 'birthMonth' || event.target.id === 'birthYear') {
+    populateBirthDayOptions();
+  }
+  updateBirthDateInput();
+}
+
+function populateBirthDayOptions() {
+  const daySelect = document.getElementById('birthDay');
+  const monthSelect = document.getElementById('birthMonth');
+  const yearSelect = document.getElementById('birthYear');
+  if (!daySelect || !monthSelect || !yearSelect) {
+    return;
+  }
+
+  const selectedDay = daySelect.value;
+  const month = Number(monthSelect.value || 1);
+  const year = Number(yearSelect.value || new Date().getFullYear());
+  const daysInMonth = new Date(year, month, 0).getDate();
+
+  fillPlaceholderOption(daySelect, 'Día');
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const option = document.createElement('option');
+    option.value = String(day).padStart(2, '0');
+    option.textContent = String(day).padStart(2, '0');
+    daySelect.appendChild(option);
+  }
+
+  if (selectedDay && Number(selectedDay) <= daysInMonth) {
+    daySelect.value = selectedDay;
+  }
+}
+
+function updateBirthDateInput() {
+  const day = document.getElementById('birthDay')?.value || '';
+  const month = document.getElementById('birthMonth')?.value || '';
+  const year = document.getElementById('birthYear')?.value || '';
+  const input = document.getElementById('inputFechaNacimiento');
+  if (!input) {
+    return '';
+  }
+
+  input.value = day && month && year ? `${year}-${month}-${day}` : '';
+  return input.value;
 }
 
 function isFutureDateInput(value) {
@@ -954,6 +1550,18 @@ async function createConsentPdf() {
     } catch (storageError) {
       console.error('Error guardando historial:', storageError);
       showMessage('PDF generado', 'El consentimiento se descargó correctamente, pero no se pudo guardar en el historial de este dispositivo.');
+    }
+
+    try {
+      createRecaptureTasksForConsent({
+        nombre: App.state.paciente.nombre,
+        rut: App.state.paciente.rut,
+        procedimientos: App.state.tratamientos,
+        consentType: App.state.consentType,
+        consentDate: new Date()
+      });
+    } catch (recaptureError) {
+      console.error('Error guardando recaptacion:', recaptureError);
     }
 
     setDoneMessage('Consentimiento generado', 'El consentimiento se generó correctamente y se guardó en el historial.');
@@ -1015,6 +1623,85 @@ async function createAssessmentPdf() {
   }
 }
 
+async function createSkinLabPdf() {
+  const button = document.getElementById('btnGenerateSkinLab');
+  const nombreInput = document.getElementById('skinLabNombre');
+  const edadInput = document.getElementById('skinLabEdad');
+  const concernInput = document.getElementById('skinLabConcern');
+  const considerationsInput = document.getElementById('skinLabConsiderations');
+
+  const nombre = nombreInput.value.trim();
+  const edad = edadInput.value.trim();
+  const concern = concernInput.value.trim();
+  const considerations = considerationsInput.value.trim();
+  const goals = [...App.state.skinLab.goals];
+
+  if (!nombre) {
+    showMessage('Datos incompletos', 'Ingrese el nombre de la paciente.', 'Atencion', 'Volver a completar', 'skinLabNombre');
+    return;
+  }
+
+  if (!edad || Number(edad) < 1 || Number(edad) > 120) {
+    showMessage('Datos incompletos', 'Ingrese una edad valida para la paciente.', 'Atencion', 'Volver a completar', 'skinLabEdad');
+    return;
+  }
+
+  const derived = deriveSkinLabDataFromAssessment();
+  const finalGoals = goals.length ? goals : derived?.goals || [];
+  const finalConcern = concern || derived?.concern || '';
+  const finalConsiderations = considerations || derived?.considerations || '';
+
+  if (!finalGoals.length) {
+    showMessage('Datos incompletos', 'Seleccione al menos un objetivo para la piel.', 'Atencion', 'Volver a completar');
+    return;
+  }
+
+  if (!finalConcern) {
+    showMessage('Datos incompletos', 'Complete la preocupacion principal de la piel.', 'Atencion', 'Volver a completar', 'skinLabConcern');
+    return;
+  }
+
+  button.disabled = true;
+  try {
+    const result = await PdfGenerator.generateSkinLabPdf({
+      paciente: { nombre, edad },
+      goals: finalGoals,
+      concern: finalConcern,
+      considerations: finalConsiderations,
+      assessment: App.state.assessment
+    });
+
+    await downloadBlob(new Blob([result.pdfBytes], { type: 'application/pdf' }), result.fileName);
+
+    try {
+      await ConsentStorage.saveConsent({
+        nombre,
+        edad,
+        rut: '',
+        fecha: formatDate(new Date()),
+        tipo: 'SKIN LAB',
+        tratamiento: 'Skin Lab - Objetivos del Tratamiento',
+        autorizacion: '',
+        archivo: result.fileName,
+        pdfBytes: result.pdfBytes
+      });
+      await refreshHistory();
+    } catch (storageError) {
+      console.error('Error guardando historial:', storageError);
+      showMessage('PDF generado', 'La evaluacion Skin Lab se descargo correctamente, pero no se pudo guardar en el historial de este dispositivo.');
+    }
+
+    setDoneMessage('¡Gracias por completar tu evaluación!', 'Hemos registrado tus objetivos y preferencias. Esta información nos ayudará a personalizar tu tratamiento Skin Lab.', 'assessment');
+    showStep('done');
+    resetSkinLabFlow();
+  } catch (error) {
+    console.error(error);
+    showMessage('No se pudo generar el PDF', error?.message || 'Revise las respuestas e intente nuevamente.');
+  } finally {
+    button.disabled = false;
+  }
+}
+
 function setDoneMessage(title, message, mode = 'consent') {
   document.querySelector('#stepDone h2').textContent = title;
   document.querySelector('#stepDone > .card > p').textContent = message;
@@ -1052,38 +1739,489 @@ function blobToBase64(blob) {
   });
 }
 
+function createRecaptureTasksForConsent({ nombre, rut, procedimientos, consentType, consentDate }) {
+  const selectedProcedures = Array.isArray(procedimientos) ? procedimientos : [];
+  const recapturableProcedures = selectedProcedures.filter((procedure) => !isExcludedRecaptureProcedure(procedure));
+  if (!recapturableProcedures.length) {
+    return;
+  }
+
+  if (consentType === 'toxina') {
+    const toxinProcedures = recapturableProcedures.filter(isToxinProcedure);
+    const annualProcedures = recapturableProcedures.filter((procedure) => !isToxinProcedure(procedure));
+
+    if (toxinProcedures.length) {
+      createRecaptureTask({
+        nombre,
+        rut,
+        procedimiento: toxinProcedures.join(', '),
+        consentType,
+        consentDate
+      });
+    }
+
+    if (annualProcedures.length) {
+      createRecaptureTask({
+        nombre,
+        rut,
+        procedimiento: annualProcedures.join(', '),
+        consentType: null,
+        consentDate
+      });
+    }
+
+    return;
+  }
+
+  createRecaptureTask({
+    nombre,
+    rut,
+    procedimiento: recapturableProcedures.join(', '),
+    consentType,
+    consentDate
+  });
+}
+
+function createRecaptureTask({ nombre, rut, procedimiento, consentType, consentDate }) {
+  const treatmentDate = consentDate instanceof Date ? consentDate : new Date();
+  const monthsToContact = getRecaptureDelayMonths(procedimiento, consentType);
+  const contactDate = addMonths(treatmentDate, monthsToContact);
+  const id = globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `recapture-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+  App.recaptureRecords.push({
+    id,
+    nombre: nombre || '',
+    rut: rut || '',
+    procedimiento: procedimiento || 'Procedimiento',
+    consentDate: toDateInputValue(treatmentDate),
+    contactFrom: toDateInputValue(contactDate),
+    status: 'pending',
+    contactedAt: '',
+    contactedMonth: '',
+    createdAt: new Date().toISOString()
+  });
+  App.recaptureRecords.sort((a, b) => a.contactFrom.localeCompare(b.contactFrom) || a.createdAt.localeCompare(b.createdAt));
+  saveRecaptureRecords();
+}
+
+function getRecaptureDelayMonths(procedimiento, consentType) {
+  const normalized = removeAccents(`${procedimiento || ''} ${consentType || ''}`).toLowerCase();
+  return isToxinProcedure(normalized) ? 5 : 12;
+}
+
+function isToxinProcedure(value) {
+  const normalized = removeAccents(value || '').toLowerCase();
+  return normalized.includes('toxina') || normalized.includes('botulinica');
+}
+
+function isExcludedRecaptureProcedure(value) {
+  const normalized = removeAccents(value || '').toLowerCase();
+  return normalized.includes('hialuronidasa') || normalized.includes('colagenasa');
+}
+
+function renderRecaptureView() {
+  App.recaptureRecords = loadRecaptureRecords();
+  const monthInput = document.getElementById('recaptureMonth');
+
+  if (!App.state.recaptureMonth) {
+    App.state.recaptureMonth = getMonthKey(new Date());
+  }
+
+  if (monthInput) {
+    monthInput.value = App.state.recaptureMonth;
+  }
+
+  updateRecaptureCounters();
+  renderRecaptureList(getFilteredRecaptureRecords());
+}
+
+function updateRecaptureCounters() {
+  const month = App.state.recaptureMonth || getMonthKey(new Date());
+  const monthRecords = App.recaptureRecords.filter((record) => getMonthKey(record.contactFrom) === month);
+  const pending = monthRecords.filter((record) => record.status === 'pending').length;
+  const contacted = monthRecords.filter((record) => record.status === 'contacted').length;
+  const scheduled = Number(App.recaptureStats.totalScheduled || 0);
+
+  document.getElementById('recapturePendingCount').textContent = String(pending);
+  document.getElementById('recaptureContactedCount').textContent = String(contacted);
+  document.getElementById('recaptureScheduledCount').textContent = String(scheduled);
+}
+
+function getFilteredRecaptureRecords() {
+  const month = App.state.recaptureMonth || getMonthKey(new Date());
+  const query = removeAccents(document.getElementById('recaptureSearch').value.trim()).toLowerCase();
+
+  return App.recaptureRecords.filter((record) => {
+    const recordMonth = getMonthKey(record.contactFrom);
+    const matchesMonth = recordMonth === month;
+    const haystack = removeAccents([record.nombre, record.rut].join(' ')).toLowerCase();
+    const matchesQuery = !query || haystack.includes(query);
+    return matchesMonth && matchesQuery;
+  });
+}
+
+function renderRecaptureList(records) {
+  const list = document.getElementById('recaptureList');
+  const pagination = document.getElementById('recapturePagination');
+  list.innerHTML = '';
+  if (pagination) {
+    pagination.innerHTML = '';
+  }
+
+  if (!records.length) {
+    list.innerHTML = '<p class="empty-state">No hay pacientes que requieran seguimiento activo para los filtros seleccionados.</p>';
+    return;
+  }
+
+  const totalPages = Math.ceil(records.length / RECAPTURE_PAGE_SIZE);
+  App.state.recapturePage = Math.min(Math.max(App.state.recapturePage, 1), totalPages);
+  const startIndex = (App.state.recapturePage - 1) * RECAPTURE_PAGE_SIZE;
+  const visibleRecords = records.slice(startIndex, startIndex + RECAPTURE_PAGE_SIZE);
+
+  visibleRecords.forEach((record) => {
+    const taskKey = getRecaptureTaskKey(record);
+    const row = document.createElement('article');
+    row.className = `recapture-row recapture-row-${record.status}`;
+
+    const patient = document.createElement('div');
+    patient.className = 'recapture-patient';
+
+    const avatar = document.createElement('span');
+    avatar.className = 'recapture-avatar';
+    avatar.textContent = getInitials(record.nombre);
+
+    const patientCopy = document.createElement('div');
+    patientCopy.className = 'recapture-patient-copy';
+
+    const title = document.createElement('h3');
+    title.textContent = record.nombre || 'Paciente sin nombre';
+
+    const rut = document.createElement('p');
+    rut.textContent = `RUT: ${record.rut || 'Sin RUT'}`;
+
+    patientCopy.append(title, rut);
+    patient.append(avatar, patientCopy);
+
+    const procedure = createRecaptureField('Procedimiento', record.procedimiento || 'Procedimiento', false, 'procedure');
+    const treatmentDate = createRecaptureField('Fecha procedimiento', formatDateForDisplay(record.consentDate), true, 'treatment-date');
+    const contactDate = createRecaptureField('Contactar desde', formatDateForDisplay(record.contactFrom), true, 'contact-date');
+
+    const status = document.createElement('span');
+    status.className = `recapture-status recapture-status-${record.status}`;
+    status.textContent = RECAPTURE_STATUS[record.status] || 'Pendiente';
+
+    const actions = document.createElement('div');
+    actions.className = 'recapture-actions';
+
+    const contactedButton = document.createElement('button');
+    contactedButton.type = 'button';
+    contactedButton.className = 'secondary recapture-action-button recapture-contact-button';
+    contactedButton.textContent = 'Contactada';
+    contactedButton.setAttribute('aria-pressed', record.status === 'contacted' ? 'true' : 'false');
+    contactedButton.addEventListener('click', () => {
+      updateRecaptureStatus(taskKey, record.status === 'contacted' ? 'pending' : 'contacted');
+    });
+
+    const scheduledButton = document.createElement('button');
+    scheduledButton.type = 'button';
+    scheduledButton.className = 'recapture-action-button recapture-scheduled-button';
+    scheduledButton.textContent = 'Agendó cita';
+    scheduledButton.addEventListener('click', () => confirmCompleteRecaptureTask(taskKey));
+
+    const deleteButton = document.createElement('button');
+    deleteButton.type = 'button';
+    deleteButton.className = 'recapture-delete-button';
+    deleteButton.innerHTML = `
+      <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
+        <path d="M3 6h18"></path>
+        <path d="M8 6V4h8v2"></path>
+        <path d="M19 6l-1 14H6L5 6"></path>
+        <path d="M10 11v5"></path>
+        <path d="M14 11v5"></path>
+      </svg>
+    `;
+    deleteButton.setAttribute('aria-label', `Eliminar seguimiento de ${record.nombre || 'paciente'}`);
+    deleteButton.title = 'Eliminar de la lista';
+    deleteButton.addEventListener('click', () => confirmDeleteRecaptureTask(taskKey));
+
+    actions.append(contactedButton, scheduledButton, deleteButton);
+    row.append(patient, procedure, treatmentDate, contactDate, status, actions);
+    list.appendChild(row);
+  });
+
+  renderRecapturePagination(records.length, totalPages);
+}
+
+function renderRecapturePagination(totalRecords, totalPages) {
+  const pagination = document.getElementById('recapturePagination');
+  if (!pagination || totalPages <= 1) {
+    return;
+  }
+
+  const page = App.state.recapturePage;
+  const startRecord = (page - 1) * RECAPTURE_PAGE_SIZE + 1;
+  const endRecord = Math.min(page * RECAPTURE_PAGE_SIZE, totalRecords);
+
+  const summary = document.createElement('div');
+  summary.className = 'history-pagination-summary';
+  summary.innerHTML = `
+    <p><strong>${endRecord - startRecord + 1}</strong> pacientes visibles &middot; <strong>${totalRecords}</strong> en total</p>
+  `;
+
+  const controls = document.createElement('div');
+  controls.className = 'history-pagination-controls';
+
+  const previousButton = document.createElement('button');
+  previousButton.type = 'button';
+  previousButton.className = 'secondary history-page-button';
+  previousButton.innerHTML = '<span class="history-page-arrow history-page-arrow-prev" aria-hidden="true"></span>';
+  previousButton.setAttribute('aria-label', 'Pagina anterior');
+  previousButton.disabled = page === 1;
+  previousButton.addEventListener('click', () => {
+    App.state.recapturePage -= 1;
+    renderRecaptureList(getFilteredRecaptureRecords());
+  });
+
+  const pageLabel = document.createElement('span');
+  pageLabel.className = 'history-page-indicator';
+  pageLabel.textContent = `${page} / ${totalPages}`;
+
+  const nextButton = document.createElement('button');
+  nextButton.type = 'button';
+  nextButton.className = 'secondary history-page-button';
+  nextButton.innerHTML = '<span class="history-page-arrow history-page-arrow-next" aria-hidden="true"></span>';
+  nextButton.setAttribute('aria-label', 'Pagina siguiente');
+  nextButton.disabled = page === totalPages;
+  nextButton.addEventListener('click', () => {
+    App.state.recapturePage += 1;
+    renderRecaptureList(getFilteredRecaptureRecords());
+  });
+
+  controls.append(previousButton, pageLabel, nextButton);
+  pagination.append(summary, controls);
+}
+
+function createRecaptureField(label, value, withIcon = false, variant = '') {
+  const item = document.createElement('div');
+  item.className = [
+    'recapture-field',
+    withIcon ? 'recapture-field-date' : '',
+    variant ? `recapture-field-${variant}` : ''
+  ].filter(Boolean).join(' ');
+  const labelElement = document.createElement('span');
+  const valueElement = document.createElement('strong');
+  labelElement.textContent = label;
+  valueElement.textContent = value || '-';
+  item.append(labelElement, valueElement);
+  return item;
+}
+
+function getInitials(name) {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) {
+    return '--';
+  }
+
+  return parts.slice(0, 2).map((part) => part.charAt(0).toUpperCase()).join('');
+}
+
+function getRecaptureTaskKey(record) {
+  return [
+    record.id || '',
+    record.contactFrom || '',
+    normalizeRecaptureIdentity(record.procedimiento)
+  ].join('|');
+}
+
+function normalizeRecaptureIdentity(value) {
+  return removeAccents(value || '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function findRecaptureRecordByTaskKey(taskKey) {
+  return App.recaptureRecords.find((item) => getRecaptureTaskKey(item) === taskKey);
+}
+
+function updateRecaptureStatus(taskKey, status) {
+  const record = findRecaptureRecordByTaskKey(taskKey);
+  if (!record) {
+    return;
+  }
+
+  record.status = status;
+  if (status === 'contacted') {
+    record.contactedAt = new Date().toISOString();
+    record.contactedMonth = getMonthKey(record.contactFrom);
+  } else {
+    record.contactedAt = '';
+    record.contactedMonth = '';
+  }
+  saveRecaptureRecords();
+  renderRecaptureView();
+}
+
+function confirmCompleteRecaptureTask(taskKey) {
+  showConfirmModal({
+    eyebrow: 'Recaptacion',
+    title: '¿Finalizar seguimiento?',
+    message: 'Esta tarea desaparecerá de la bandeja de recaptación activa.',
+    cancelLabel: 'Cancelar',
+    confirmLabel: 'Sí, finalizar',
+    onConfirm: () => completeRecaptureTask(taskKey)
+  });
+}
+
+function confirmDeleteRecaptureTask(taskKey) {
+  showConfirmModal({
+    eyebrow: 'Recaptacion',
+    title: '¿Eliminar seguimiento?',
+    message: 'Esta tarea desaparecerá de la bandeja activa y no se registrará como cita agendada.',
+    cancelLabel: 'Cancelar',
+    confirmLabel: 'Sí, eliminar',
+    onConfirm: () => deleteRecaptureTask(taskKey)
+  });
+}
+
+function completeRecaptureTask(taskKey) {
+  const record = findRecaptureRecordByTaskKey(taskKey);
+  if (!record) {
+    return;
+  }
+
+  const month = getMonthKey(record.contactFrom);
+  App.recaptureStats[month] = App.recaptureStats[month] || {};
+  App.recaptureStats[month].scheduled = Number(App.recaptureStats[month].scheduled || 0) + 1;
+  App.recaptureStats.totalScheduled = Number(App.recaptureStats.totalScheduled || 0) + 1;
+  App.recaptureRecords = App.recaptureRecords.filter((item) => getRecaptureTaskKey(item) !== taskKey);
+  saveRecaptureStats();
+  saveRecaptureRecords();
+  renderRecaptureView();
+}
+
+function deleteRecaptureTask(taskKey) {
+  App.recaptureRecords = App.recaptureRecords.filter((item) => getRecaptureTaskKey(item) !== taskKey);
+  saveRecaptureRecords();
+  renderRecaptureView();
+}
+
+function changeRecaptureMonth(direction) {
+  const currentMonth = App.state.recaptureMonth || getMonthKey(new Date());
+  const [year, month] = currentMonth.split('-').map(Number);
+  const date = Number.isFinite(year) && Number.isFinite(month)
+    ? new Date(year, month - 1 + direction, 1)
+    : new Date();
+  App.state.recaptureMonth = getMonthKey(date);
+  App.state.recapturePage = 1;
+  renderRecaptureView();
+}
+
+function addMonths(date, months) {
+  const result = new Date(date.getTime());
+  const day = result.getDate();
+  result.setMonth(result.getMonth() + months);
+  if (result.getDate() !== day) {
+    result.setDate(0);
+  }
+  return result;
+}
+
+function toDateInputValue(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getMonthKey(value) {
+  if (value instanceof Date) {
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}`;
+  }
+
+  return String(value || '').slice(0, 7);
+}
+
+function formatDateForDisplay(value) {
+  if (!value) {
+    return '';
+  }
+
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleDateString('es-CL', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  });
+}
+
+function removeAccents(value) {
+  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
 async function refreshHistory() {
   App.historyRecords = await ConsentStorage.getAllConsents();
-  const query = document.getElementById('historySearch').value.trim().toLowerCase();
-  const selectedMonth = document.getElementById('historyMonth').value;
-  const filtered = App.historyRecords.filter((record) => {
-    const matchesSearch = [record.nombre, record.rut, record.fecha, record.tipo, record.tratamiento]
-      .join(' ')
-      .toLowerCase()
-      .includes(query);
-    const matchesMonth = !selectedMonth || getRecordMonthKey(record) === selectedMonth;
-    return matchesSearch && matchesMonth;
-  });
-  renderHistoryList(filtered);
+  updateHistoryViewLabels();
+  renderHistoryList(getFilteredHistoryRecords());
+}
+
+function updateHistoryViewLabels() {
+  const isSkinLab = App.state.historyArea === 'skinLab';
+  const title = document.getElementById('historyTitle');
+  const search = document.getElementById('historySearch');
+  const exportBackupButton = document.getElementById('btnExportBackup');
+  const monthBlock = document.getElementById('historyMonthBlock');
+
+  if (title) {
+    title.textContent = isSkinLab ? 'SKIN LAB' : 'Documentacion Clinica';
+  }
+
+  if (search) {
+    search.placeholder = isSkinLab ? 'Buscar paciente' : 'Buscar paciente, procedimiento o RUT';
+  }
+
+  if (exportBackupButton) {
+    exportBackupButton.textContent = isSkinLab ? 'Exportar Skin Lab completo' : 'Exportar historial completo';
+  }
+
+  if (monthBlock) {
+    monthBlock.classList.remove('hidden');
+    monthBlock.hidden = false;
+    monthBlock.setAttribute('aria-hidden', 'false');
+  }
 }
 
 function renderHistoryList(records) {
   const list = document.getElementById('historyList');
+  const pagination = document.getElementById('historyPagination');
   list.innerHTML = '';
+  if (pagination) {
+    pagination.innerHTML = '';
+  }
 
   if (!records.length) {
-    list.innerHTML = '<p>No hay registros en el historial.</p>';
+    list.innerHTML = App.state.historyArea === 'skinLab'
+      ? '<p>No hay documentos Skin Lab guardados.</p>'
+      : '<p>No hay registros en el historial.</p>';
     return;
   }
 
-  records.forEach((record) => {
+  const totalPages = Math.ceil(records.length / HISTORY_PAGE_SIZE);
+  App.state.historyPage = Math.min(Math.max(App.state.historyPage, 1), totalPages);
+  const startIndex = (App.state.historyPage - 1) * HISTORY_PAGE_SIZE;
+  const visibleRecords = records.slice(startIndex, startIndex + HISTORY_PAGE_SIZE);
+
+  visibleRecords.forEach((record) => {
     const card = document.createElement('article');
     card.className = 'history-card';
     const documentKind = record.tipo === 'AUTOEVALUACION' ? 'Autoevaluaci&oacute;n est&eacute;tica' : 'Consentimiento';
-    if (record.tipo === 'AUTOEVALUACION') {
+    if (record.tipo === 'AUTOEVALUACION' || record.tipo === 'SKIN LAB') {
+      const title = record.tipo === 'SKIN LAB' ? 'Skin Lab &bull; OBJETIVOS DEL TRATAMIENTO' : 'Autoevaluaci&oacute;n &bull; EST&Eacute;TICA';
       card.innerHTML = `
         <h3>${record.nombre}</h3>
-        <p class="history-consent">Autoevaluaci&oacute;n &bull; EST&Eacute;TICA</p>
+        <p class="history-consent">${title}</p>
+        ${record.edad ? `<p><strong>Edad</strong> ${record.edad}</p>` : ''}
         <p><strong>Fecha de emisi&oacute;n</strong> ${formatHistoryDisplayDate(record)}</p>
         <div class="history-actions"></div>
       `;
@@ -1108,7 +2246,8 @@ function renderHistoryList(records) {
     btnDownload.className = 'secondary';
     btnDownload.textContent = 'Descargar';
     btnDownload.addEventListener('click', async () => {
-      await downloadBlob(new Blob([record.pdfBytes], { type: 'application/pdf' }), record.archivo);
+      const bytes = normalizePdfBytes(record.pdfBytes);
+      await downloadBlob(new Blob([bytes], { type: 'application/pdf' }), record.archivo);
     });
     actions.appendChild(btnDownload);
     const btnDelete = document.createElement('button');
@@ -1118,6 +2257,81 @@ function renderHistoryList(records) {
     actions.appendChild(btnDelete);
     list.appendChild(card);
   });
+
+  renderHistoryPagination(records.length, totalPages);
+}
+
+function renderHistoryPagination(totalRecords, totalPages) {
+  const pagination = document.getElementById('historyPagination');
+  if (!pagination || totalPages <= 1) {
+    return;
+  }
+
+  const page = App.state.historyPage;
+  const startRecord = (page - 1) * HISTORY_PAGE_SIZE + 1;
+  const endRecord = Math.min(page * HISTORY_PAGE_SIZE, totalRecords);
+
+  const summary = document.createElement('div');
+  summary.className = 'history-pagination-summary';
+  summary.innerHTML = `
+    <p><strong>${endRecord - startRecord + 1}</strong> documentos visibles &middot; <strong>${totalRecords}</strong> en total</p>
+  `;
+
+  const controls = document.createElement('div');
+  controls.className = 'history-pagination-controls';
+
+  const previousButton = document.createElement('button');
+  previousButton.type = 'button';
+  previousButton.className = 'secondary history-page-button';
+  previousButton.innerHTML = '<span class="history-page-arrow history-page-arrow-prev" aria-hidden="true"></span>';
+  previousButton.setAttribute('aria-label', 'Pagina anterior');
+  previousButton.disabled = page === 1;
+  previousButton.addEventListener('click', () => {
+    App.state.historyPage -= 1;
+    renderHistoryList(getFilteredHistoryRecords());
+  });
+
+  const pageLabel = document.createElement('span');
+  pageLabel.className = 'history-page-indicator';
+  pageLabel.textContent = `${page} / ${totalPages}`;
+
+  const nextButton = document.createElement('button');
+  nextButton.type = 'button';
+  nextButton.className = 'secondary history-page-button';
+  nextButton.innerHTML = '<span class="history-page-arrow history-page-arrow-next" aria-hidden="true"></span>';
+  nextButton.setAttribute('aria-label', 'Pagina siguiente');
+  nextButton.disabled = page === totalPages;
+  nextButton.addEventListener('click', () => {
+    App.state.historyPage += 1;
+    renderHistoryList(getFilteredHistoryRecords());
+  });
+
+  controls.append(previousButton, pageLabel, nextButton);
+  pagination.append(summary, controls);
+}
+
+function getFilteredHistoryRecords() {
+  const query = document.getElementById('historySearch').value.trim().toLowerCase();
+  return getHistoryAreaRecords().filter((record) => {
+    if (!query) {
+      return true;
+    }
+    if (App.state.historyArea === 'skinLab') {
+      return String(record.nombre || '').toLowerCase().includes(query);
+    }
+    return [record.nombre, record.rut, record.fecha, record.tipo, record.tratamiento]
+      .join(' ')
+      .toLowerCase()
+      .includes(query);
+  });
+}
+
+function getHistoryAreaRecords(records = App.historyRecords) {
+  if (App.state.historyArea === 'skinLab') {
+    return records.filter((record) => record.tipo === 'SKIN LAB');
+  }
+
+  return records.filter((record) => record.tipo !== 'SKIN LAB');
 }
 
 async function openDocumentPreview(record) {
@@ -1127,6 +2341,11 @@ async function openDocumentPreview(record) {
 
   const viewer = document.getElementById('historyPdfViewer');
   const bytes = normalizePdfBytes(record.pdfBytes);
+  if (!bytes.length) {
+    viewer.innerHTML = '<p class="pdf-render-status">Este registro no tiene un PDF guardado para previsualizar.</p>';
+    return;
+  }
+
   await renderPdfIntoViewer({ data: bytes }, viewer, {
     loadingText: 'Cargando documento firmado...',
     errorText: 'No se pudo previsualizar este documento.'
@@ -1144,10 +2363,15 @@ async function downloadPreviewDocument() {
     return;
   }
 
-  await downloadBlob(new Blob([App.previewRecord.pdfBytes], { type: 'application/pdf' }), App.previewRecord.archivo);
+  const bytes = normalizePdfBytes(App.previewRecord.pdfBytes);
+  await downloadBlob(new Blob([bytes], { type: 'application/pdf' }), App.previewRecord.archivo);
 }
 
 function normalizePdfBytes(pdfBytes) {
+  if (!pdfBytes) {
+    return new Uint8Array();
+  }
+
   if (pdfBytes instanceof Uint8Array) {
     return new Uint8Array(pdfBytes);
   }
@@ -1156,12 +2380,46 @@ function normalizePdfBytes(pdfBytes) {
     return new Uint8Array(pdfBytes.slice(0));
   }
 
-  return new Uint8Array(pdfBytes);
+  if (Array.isArray(pdfBytes)) {
+    return new Uint8Array(pdfBytes);
+  }
+
+  if (typeof pdfBytes === 'string') {
+    const base64 = pdfBytes.includes(',') ? pdfBytes.split(',').pop() : pdfBytes;
+    try {
+      return Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+    } catch (error) {
+      console.error('PDF guardado con formato de texto no valido:', error);
+      return new Uint8Array();
+    }
+  }
+
+  if (typeof pdfBytes === 'object') {
+    if (Array.isArray(pdfBytes.data)) {
+      return new Uint8Array(pdfBytes.data);
+    }
+
+    if (pdfBytes.buffer instanceof ArrayBuffer) {
+      const offset = pdfBytes.byteOffset || 0;
+      const length = pdfBytes.byteLength || pdfBytes.buffer.byteLength;
+      return new Uint8Array(pdfBytes.buffer.slice(offset, offset + length));
+    }
+
+    const numericKeys = Object.keys(pdfBytes)
+      .filter((key) => /^\d+$/.test(key))
+      .sort((a, b) => Number(a) - Number(b));
+    if (numericKeys.length) {
+      return new Uint8Array(numericKeys.map((key) => pdfBytes[key]));
+    }
+  }
+
+  return new Uint8Array();
 }
 
 async function exportBackup() {
-  const records = await ConsentStorage.getAllConsents();
-  await exportRecords(records, `consentimientos_completo_${formatDateForFile(new Date())}.zip`, 'consentimientos_completo');
+  const records = getHistoryAreaRecords(await ConsentStorage.getAllConsents());
+  const prefix = App.state.historyArea === 'skinLab' ? 'skin_lab' : 'consentimientos';
+  await exportRecords(records, `${prefix}_completo_${formatDateForFile(new Date())}.zip`, `${prefix}_completo`);
 }
 
 async function exportMonthBackup() {
@@ -1178,7 +2436,8 @@ async function exportMonthBackup() {
   }
 
   const monthKey = month.replace('-', '');
-  await exportRecords(records, `consentimientos_${monthKey}.zip`, `consentimientos_${monthKey}`);
+  const prefix = App.state.historyArea === 'skinLab' ? 'skin_lab' : 'consentimientos';
+  await exportRecords(records, `${prefix}_${monthKey}.zip`, `${prefix}_${monthKey}`);
 }
 
 async function exportRecords(records, fileName, folderName) {
@@ -1186,7 +2445,10 @@ async function exportRecords(records, fileName, folderName) {
   const consentFolder = zip.folder(folderName || 'consentimientos');
 
   records.forEach((record) => {
-    consentFolder.file(record.archivo, record.pdfBytes);
+    const bytes = normalizePdfBytes(record.pdfBytes);
+    if (bytes.length) {
+      consentFolder.file(record.archivo, bytes);
+    }
   });
 
   const content = await zip.generateAsync({ type: 'blob' });
@@ -1232,7 +2494,7 @@ function getRecordsForSelectedMonth() {
     return [];
   }
 
-  return App.historyRecords.filter((record) => getRecordMonthKey(record) === month);
+  return getHistoryAreaRecords().filter((record) => getRecordMonthKey(record) === month);
 }
 
 function getRecordMonthKey(record) {
