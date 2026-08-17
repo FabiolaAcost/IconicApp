@@ -12,7 +12,8 @@ const App = {
       touched: {}
     },
     skinLab: {
-      goals: []
+      goals: [],
+      relaxZones: []
     },
     signatureDataUrl: null,
     historyAccessGranted: false,
@@ -137,6 +138,7 @@ const SKIN_LAB_GOAL_META = {
   Flacidez: 'Flacidez',
   'Falta de luminosidad': 'Falta de<br>luminosidad'
 };
+const SKIN_LAB_RELAX_ZONES = ['Frente', 'Sienes', 'Mejillas', 'Mandíbula', 'Cuello', 'Hombros'];
 const ASSESSMENT_TO_SKINLAB_GOAL_MAP = {
   piel: 'Falta de luminosidad',
   arrugas: 'Lineas finas o arrugas',
@@ -453,7 +455,8 @@ function resetAssessmentFlow() {
 
 function resetSkinLabFlow() {
   App.state.skinLab = {
-    goals: []
+    goals: [],
+    relaxZones: []
   };
 
   const form = document.getElementById('skinLabForm');
@@ -483,6 +486,7 @@ function resetSkinLabFlow() {
   }
 
   renderSkinLabGoals();
+  renderSkinLabRelaxZones();
 }
 
 function resetPatientForm() {
@@ -934,6 +938,75 @@ function updateSkinLabGoalSelection() {
     const isSelected = selected.includes(button.dataset.goal);
     button.classList.toggle('is-selected', isSelected);
     button.setAttribute('aria-checked', String(isSelected));
+  });
+}
+
+function renderSkinLabRelaxZones() {
+  const container = document.getElementById('skinLabRelaxZones');
+  if (!container || container.children.length) {
+    bindSkinLabRelaxMarkers();
+    updateSkinLabRelaxZoneSelection();
+    return;
+  }
+
+  SKIN_LAB_RELAX_ZONES.forEach((zone, index) => {
+    const option = document.createElement('div');
+    option.className = 'skin-lab-option relax-time-option';
+    option.dataset.relaxZone = zone;
+    option.setAttribute('role', 'checkbox');
+    option.setAttribute('tabindex', '0');
+    option.setAttribute('aria-checked', 'false');
+    option.innerHTML = `
+      <span class="relax-time-number" aria-hidden="true">${index + 1}</span>
+      <span class="skin-lab-option-label">${zone}</span>
+      <span class="skin-lab-check" aria-hidden="true"></span>
+    `;
+
+    option.addEventListener('click', () => toggleSkinLabRelaxZone(zone));
+    option.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        toggleSkinLabRelaxZone(zone);
+      }
+    });
+    container.appendChild(option);
+  });
+
+  bindSkinLabRelaxMarkers();
+  updateSkinLabRelaxZoneSelection();
+}
+
+function bindSkinLabRelaxMarkers() {
+  document.querySelectorAll('button[data-relax-marker]').forEach((marker) => {
+    if (marker.dataset.bound === 'true') {
+      return;
+    }
+    marker.dataset.bound = 'true';
+    marker.addEventListener('click', () => toggleSkinLabRelaxZone(marker.dataset.relaxMarker));
+  });
+}
+
+function toggleSkinLabRelaxZone(zone) {
+  const selected = App.state.skinLab.relaxZones;
+  App.state.skinLab.relaxZones = selected.includes(zone)
+    ? selected.filter((item) => item !== zone)
+    : [...selected, zone];
+  updateSkinLabRelaxZoneSelection();
+}
+
+function updateSkinLabRelaxZoneSelection() {
+  const selected = App.state.skinLab.relaxZones;
+  document.querySelectorAll('.relax-time-option').forEach((option) => {
+    const isSelected = selected.includes(option.dataset.relaxZone);
+    option.classList.toggle('is-selected', isSelected);
+    option.setAttribute('aria-checked', String(isSelected));
+  });
+  document.querySelectorAll('[data-relax-marker]').forEach((marker) => {
+    const isSelected = selected.includes(marker.dataset.relaxMarker);
+    marker.classList.toggle('is-selected', isSelected);
+    if (marker.matches('button')) {
+      marker.setAttribute('aria-pressed', String(isSelected));
+    }
   });
 }
 
@@ -1635,6 +1708,7 @@ async function createSkinLabPdf() {
   const concern = concernInput.value.trim();
   const considerations = considerationsInput.value.trim();
   const goals = [...App.state.skinLab.goals];
+  const relaxZones = [...App.state.skinLab.relaxZones];
 
   if (!nombre) {
     showMessage('Datos incompletos', 'Ingrese el nombre de la paciente.', 'Atencion', 'Volver a completar', 'skinLabNombre');
@@ -1668,6 +1742,7 @@ async function createSkinLabPdf() {
       goals: finalGoals,
       concern: finalConcern,
       considerations: finalConsiderations,
+      relaxZones,
       assessment: App.state.assessment
     });
 
