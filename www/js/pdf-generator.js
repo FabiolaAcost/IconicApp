@@ -56,16 +56,25 @@ const PdfGenerator = (() => {
   const ASSESSMENT_VALUE_X = [107.6, 147.3, 186.9, 226.6, 266.3, 306, 345.7, 385.4, 425.1, 464.7, 504.4];
   const SKIN_LAB_FIELDS = {
     fecha: {
-      day: { x: 468, y: 31.8, width: 16 },
-      month: { x: 506, y: 31.8, width: 16 },
-      year: { x: 535, y: 31.8, width: 32 }
+      day: { x: 440, y: 22, width: 18 },
+      month: { x: 468, y: 22, width: 18 },
+      year: { x: 496, y: 22, width: 30 }
     },
-    nombre: { x: 162, y: 642.2, width: 344 },
-    edad: { x: 162, y: 624.2, width: 90 },
-    goals: { x: 78, y: 558, width: 460, maxLines: 4, lineHeight: 13 },
-    concern: { x: 78, y: 452, width: 460, maxLines: 7, lineHeight: 13 },
-    considerations: { x: 78, y: 271, width: 460, maxLines: 7, lineHeight: 13 }
+    nombre: { x: 184, y: 668.9, width: 326 },
+    edad: { x: 184, y: 650.9, width: 90 },
+    goals: { x: 86, y: 578, width: 424, maxLines: 4, lineHeight: 13 },
+    concern: { x: 86, y: 474, width: 424, maxLines: 7, lineHeight: 13 },
+    considerations: { x: 86, y: 317, width: 424, maxLines: 6, lineHeight: 13 },
+    relaxZones: { x: 86, y: 168, width: 220, lineHeight: 16 }
   };
+  const SKIN_LAB_RELAX_ZONES = [
+    { name: 'Frente', number: 1, markers: [{ x: 414.3, y: 185.1 }] },
+    { name: 'Sienes', number: 2, markers: [{ x: 377.9, y: 163.9 }, { x: 450.7, y: 163.9 }] },
+    { name: 'Mejillas', number: 3, markers: [{ x: 382.1, y: 144.2 }, { x: 446.5, y: 144.2 }] },
+    { name: 'Mandíbula', number: 4, markers: [{ x: 387.7, y: 126.1 }, { x: 440.9, y: 126.1 }] },
+    { name: 'Cuello', number: 5, markers: [{ x: 397.5, y: 106.4 }, { x: 431.1, y: 106.4 }] },
+    { name: 'Hombros', number: 6, markers: [{ x: 362.5, y: 86.7 }, { x: 466.1, y: 86.7 }] }
+  ];
 
   async function fetchArrayBuffer(url) {
     const embeddedAsset = getEmbeddedAsset(url);
@@ -406,6 +415,48 @@ const PdfGenerator = (() => {
     drawTextBlock((options.goals || []).join(' - '), SKIN_LAB_FIELDS.goals, font, 10, muted);
     drawTextBlock(options.concern || 'Sin informacion registrada.', SKIN_LAB_FIELDS.concern, font, 10, ink);
     drawTextBlock(options.considerations || 'Sin consideraciones adicionales registradas.', SKIN_LAB_FIELDS.considerations, font, 10, ink);
+
+    const selectedRelaxZones = new Set(options.relaxZones || []);
+    const orderedRelaxZones = SKIN_LAB_RELAX_ZONES.filter((zone) => selectedRelaxZones.has(zone.name));
+    if (orderedRelaxZones.length) {
+      orderedRelaxZones.forEach((zone, index) => {
+        page.drawText(`${zone.number}. ${zone.name}`, {
+          x: SKIN_LAB_FIELDS.relaxZones.x,
+          y: SKIN_LAB_FIELDS.relaxZones.y - (index * SKIN_LAB_FIELDS.relaxZones.lineHeight),
+          size: 10.5,
+          font,
+          color: ink
+        });
+
+        zone.markers.forEach((marker) => {
+          page.drawCircle({
+            x: marker.x,
+            y: marker.y,
+            size: 6.5,
+            color: PDFLib.rgb(0.23, 0.18, 0.14),
+            borderColor: PDFLib.rgb(0.93, 0.88, 0.81),
+            borderWidth: 0.8
+          });
+          const markerText = String(zone.number);
+          const markerTextWidth = boldFont.widthOfTextAtSize(markerText, 7.5);
+          page.drawText(markerText, {
+            x: marker.x - (markerTextWidth / 2),
+            y: marker.y - 2.6,
+            size: 7.5,
+            font: boldFont,
+            color: PDFLib.rgb(1, 0.99, 0.97)
+          });
+        });
+      });
+    } else {
+      page.drawText('Sin zonas seleccionadas.', {
+        x: SKIN_LAB_FIELDS.relaxZones.x,
+        y: SKIN_LAB_FIELDS.relaxZones.y,
+        size: 10,
+        font,
+        color: muted
+      });
+    }
 
     const pdfBytes = await pdfDoc.save();
     return { pdfBytes, fileName: buildSkinLabFileName(options) };

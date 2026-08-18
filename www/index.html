@@ -106,6 +106,35 @@
           <span class="field-help">Ejemplo: alergias, tratamientos recientes, embarazo, sensibilidad a productos o eventos pr&oacute;ximos.</span>
           <textarea id="skinLabConsiderations" rows="5"></textarea>
         </label>
+        <section class="relax-time form-wide" aria-labelledby="relaxTimeTitle">
+          <div class="relax-time-heading">
+            <p class="eyebrow" id="relaxTimeTitle">RELAX TIME</p>
+            <p>Todos nuestros servicios del &aacute;rea de Cosmetolog&iacute;a y Beauty Lab incluyen un momento de &ldquo;Relax Time&rdquo; que consiste en un breve masaje en las zonas de mayor tensi&oacute;n.</p>
+            <p>Selecciona una o varias zonas donde sientes mayor tensi&oacute;n y deseas recibir masaje durante tu sesi&oacute;n.</p>
+          </div>
+          <div class="relax-time-content">
+            <div class="relax-time-controls">
+              <fieldset class="skin-lab-fieldset relax-time-fieldset">
+                <legend>Zonas de mayor tensi&oacute;n</legend>
+                <div id="skinLabRelaxZones" class="skin-lab-options relax-time-options" aria-label="Zonas de mayor tensi&oacute;n"></div>
+              </fieldset>
+            </div>
+            <figure class="relax-time-figure" aria-label="Ilustraci&oacute;n de las zonas disponibles para masaje">
+              <img src="assets/relax-time-woman.png" alt="Rostro y hombros de una mujer relajada">
+              <button type="button" class="relax-time-marker marker-forehead" data-relax-marker="Frente" aria-label="Seleccionar Frente">1</button>
+              <button type="button" class="relax-time-marker marker-temple-left" data-relax-marker="Sienes" aria-label="Seleccionar sien izquierda">2</button>
+              <button type="button" class="relax-time-marker marker-temple-right" data-relax-marker="Sienes" aria-label="Seleccionar sien derecha">2</button>
+              <button type="button" class="relax-time-marker marker-cheek-left" data-relax-marker="Mejillas" aria-label="Seleccionar mejilla izquierda">3</button>
+              <button type="button" class="relax-time-marker marker-cheek-right" data-relax-marker="Mejillas" aria-label="Seleccionar mejilla derecha">3</button>
+              <button type="button" class="relax-time-marker marker-jaw-left" data-relax-marker="Mandíbula" aria-label="Seleccionar mandíbula izquierda">4</button>
+              <button type="button" class="relax-time-marker marker-jaw-right" data-relax-marker="Mandíbula" aria-label="Seleccionar mandíbula derecha">4</button>
+              <button type="button" class="relax-time-marker marker-neck-left" data-relax-marker="Cuello" aria-label="Seleccionar lado izquierdo del cuello">5</button>
+              <button type="button" class="relax-time-marker marker-neck-right" data-relax-marker="Cuello" aria-label="Seleccionar lado derecho del cuello">5</button>
+              <button type="button" class="relax-time-marker marker-shoulder-left" data-relax-marker="Hombros" aria-label="Seleccionar hombro izquierdo">6</button>
+              <button type="button" class="relax-time-marker marker-shoulder-right" data-relax-marker="Hombros" aria-label="Seleccionar hombro derecho">6</button>
+            </figure>
+          </div>
+        </section>
       </form>
       <div class="actions">
         <button id="btnSkinLabBack" class="secondary">Volver</button>
