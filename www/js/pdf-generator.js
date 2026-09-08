@@ -320,7 +320,7 @@ const PdfGenerator = (() => {
       }
     }
 
-    const pdfBytes = await pdfDoc.save();
+    const pdfBytes = await pdfDoc.save({ useObjectStreams: false });
     const fileName = buildFileName(options);
     return { pdfBytes, fileName };
   }
@@ -350,7 +350,7 @@ const PdfGenerator = (() => {
       drawCheckMark(page, x, mark.y - 27);
     });
 
-    const pdfBytes = await pdfDoc.save();
+    const pdfBytes = await pdfDoc.save({ useObjectStreams: false });
     return { pdfBytes, fileName: buildAssessmentFileName(options) };
   }
 
@@ -458,7 +458,7 @@ const PdfGenerator = (() => {
       });
     }
 
-    const pdfBytes = await pdfDoc.save();
+    const pdfBytes = await pdfDoc.save({ useObjectStreams: false });
     return { pdfBytes, fileName: buildSkinLabFileName(options) };
   }
 

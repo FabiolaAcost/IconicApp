@@ -1,0 +1,33 @@
+<!doctype html><meta charset="utf-8"><body><pre id="result">RUNNING</pre>
+<script src="../../www/lib/pdf-lib.min.js"></script>
+<script src="../../www/lib/pdf.min.js"></script>
+<script src="../../www/lib/pdf.worker.min.js"></script>
+<script src="../../www/js/pdf-assets.js"></script>
+<script>
+(async () => {
+  const reports = [];
+  const original = Uint8Array.from(atob(window.PdfEmbeddedAssets['assets/autoevaluacion.pdf']), c => c.charCodeAt(0));
+  const doc = await PDFLib.PDFDocument.load(original);
+  const font = await doc.embedFont(PDFLib.StandardFonts.Helvetica);
+  doc.getPages()[0].drawText('Paciente de prueba', { x: 166, y: 608.4, size: 11, font });
+  const saved = await doc.save();
+  const repaired = await PDFLib.PDFDocument.load(saved);
+  const generated = await repaired.save({useObjectStreams: false});
+  for (const [name, data] of [['original', original], ['repaired-history', generated], ['new-document', await doc.save({useObjectStreams: false})]]) {
+    const pdf = await pdfjsLib.getDocument({ data }).promise;
+    for (let n = 1; n <= pdf.numPages; n++) {
+      const page = await pdf.getPage(n);
+      const viewport = page.getViewport({scale: 1});
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width; canvas.height = viewport.height;
+      const ctx = canvas.getContext('2d');
+      await page.render({canvasContext: ctx, viewport}).promise;
+      const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      let dark = 0;
+      for (let i = 0; i < pixels.length; i += 4) if (pixels[i] < 220 && pixels[i+3]) dark++;
+      reports.push({name, page: n, dark}); document.body.append(canvas);
+    }
+  }
+  document.getElementById('result').textContent = JSON.stringify(reports);
+})().catch(e => document.getElementById('result').textContent = e.stack);
+</script>

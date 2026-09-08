@@ -29,6 +29,7 @@ const App = {
   recaptureStats: {},
   procedures: [],
   pdfRenderToken: 0,
+  historyPdfRenderToken: 0,
   previewRecord: null,
   pendingFocusTarget: null,
   pendingConfirmAction: null
@@ -75,13 +76,13 @@ const ASSESSMENT_QUESTIONS = [
     id: 'grasa',
     number: 3,
     title: 'Grasa No Deseada',
-    question: '¿Te preocupa la presencia de grasa no deseada en áreas específicas como la barbilla, mejillas o cuello?'
+    question: '¿Qué tan satisfecha estás con zonas donde puede existir grasa localizada, como la barbilla, mejillas o cuello?'
   },
   {
     id: 'volumen',
     number: 4,
     title: 'Pérdida de Volumen',
-    question: '¿Notas pérdida de volumen en áreas como las mejillas, labios, zona de ojeras o pómulos?'
+    question: '¿Qué tan satisfecha estás con el volumen de zonas como las mejillas, pómulos, labios o área de las ojeras?'
   },
   {
     id: 'flacidez',
@@ -93,13 +94,13 @@ const ASSESSMENT_QUESTIONS = [
     id: 'labios',
     number: 6,
     title: 'Estructura y Soporte de los Labios',
-    question: '¿Cómo te sientes con respecto a la forma y definición de tus labios?'
+    question: '¿Qué tan satisfecha estás con la forma y definición de tus labios?'
   },
   {
     id: 'mirada',
     number: 7,
     title: 'Mirada Cansada',
-    question: '¿Te preocupan las ojeras, bolsas bajo los ojos o una apariencia de cansancio en tu mirada?'
+    question: '¿Qué tan satisfecha estás con el aspecto de tu mirada, considerando ojeras, bolsas o apariencia de cansancio?'
   },
   {
     id: 'textura',
@@ -111,13 +112,13 @@ const ASSESSMENT_QUESTIONS = [
     id: 'manchas',
     number: 9,
     title: 'Manchas y Pigmentación',
-    question: '¿Te molestan las manchas, pecas o cambios en la pigmentación de tu piel?'
+    question: '¿Qué tan satisfecha estás con la uniformidad del tono de tu piel y la presencia de manchas o pigmentación?'
   },
   {
     id: 'hidratacion',
     number: 10,
     title: 'Hidratación',
-    question: '¿Cómo te sientes con respecto a la hidratación y luminosidad de tu piel?'
+    question: '¿Qué tan satisfecha estás con la hidratación y luminosidad de tu piel?'
   }
 ];
 const SKIN_LAB_GOALS = [
@@ -581,17 +582,29 @@ async function renderPdfIntoViewer(source, viewer, options = {}) {
       const viewport = page.getViewport({ scale });
       const canvas = document.createElement('canvas');
       const context = canvas.getContext('2d');
-      const ratio = window.devicePixelRatio || 1;
+      // Limit the bitmap size for mobile WebViews and pass scaling to PDF.js.
+      const ratio = Math.min(window.devicePixelRatio || 1, 2,
+        Math.sqrt(4000000 / (viewport.width * viewport.height)));
 
       canvas.width = Math.floor(viewport.width * ratio);
       canvas.height = Math.floor(viewport.height * ratio);
       canvas.style.width = `${Math.floor(viewport.width)}px`;
       canvas.style.height = `${Math.floor(viewport.height)}px`;
-      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      await page.render({
+        canvasContext: context,
+        viewport,
+        transform: [ratio, 0, 0, ratio, 0, 0],
+        background: '#ffffff'
+      }).promise;
+      if (options.shouldContinue && !options.shouldContinue()) {
+        return;
+      }
       viewer.appendChild(canvas);
-      await page.render({ canvasContext: context, viewport }).promise;
     }
   } catch (error) {
+    if (options.shouldContinue && !options.shouldContinue()) {
+      return;
+    }
     console.error('Error renderizando PDF:', error);
     if (typeof source === 'string') {
       renderNativePdfFallback(viewer, source, options.errorText);
@@ -603,6 +616,12 @@ async function renderPdfIntoViewer(source, viewer, options = {}) {
 }
 
 async function loadPdfDocument(source) {
+  if (source && source.normalizeObjectStreams) {
+    // Re-serialize older PDFs for PDF.js without changing the stored bytes.
+    const document = await PDFLib.PDFDocument.load(source.data);
+    const data = await document.save({ useObjectStreams: false });
+    return await window.pdfjsLib.getDocument({ data }).promise;
+  }
   if (typeof source === 'string') {
     try {
       const data = await loadPdfBytes(source);
@@ -2410,6 +2429,7 @@ function getHistoryAreaRecords(records = App.historyRecords) {
 }
 
 async function openDocumentPreview(record) {
+  const renderToken = ++App.historyPdfRenderToken;
   App.previewRecord = record;
   document.getElementById('documentPreviewTitle').textContent = record.archivo || 'Previsualizacion';
   document.getElementById('documentPreviewModal').classList.remove('hidden');
@@ -2421,13 +2441,19 @@ async function openDocumentPreview(record) {
     return;
   }
 
-  await renderPdfIntoViewer({ data: bytes }, viewer, {
+  await waitForNextFrame();
+  if (renderToken !== App.historyPdfRenderToken) {
+    return;
+  }
+  await renderPdfIntoViewer({ data: bytes, normalizeObjectStreams: true }, viewer, {
     loadingText: 'Cargando documento firmado...',
-    errorText: 'No se pudo previsualizar este documento.'
+    errorText: 'No se pudo previsualizar este documento.',
+    shouldContinue: () => renderToken === App.historyPdfRenderToken
   });
 }
 
 function closeDocumentPreview() {
+  App.historyPdfRenderToken += 1;
   App.previewRecord = null;
   document.getElementById('historyPdfViewer').innerHTML = '';
   document.getElementById('documentPreviewModal').classList.add('hidden');
